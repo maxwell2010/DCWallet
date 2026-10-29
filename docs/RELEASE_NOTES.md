@@ -1,13 +1,29 @@
-DC WALLET 0.2.0-alpha.3 - native Decimal desktop alpha.
+# DC WALLET 0.2.0-alpha.3
 
-Adds encrypted private-key import, independent wallet profiles, compatible BIP39 vault migration, weighted Safe contract signatures and DelegateCall, encrypted check files, token check allowance/permit workflows, current NFT ABI compatibility and clear transaction-history descriptions. Safe inner failure is shown separately from outer receipt success.
+Нативный desktop-кошелек Decimal для Windows, Linux и macOS, x64 и ARM64. Публичный канал предварительных сборок - [alpha](https://github.com/maxwell2010/DCWallet/releases/tag/alpha), с постоянными ссылками загрузки и файлами SHA-256.
 
-Validation: 322 Core + 35 Avalonia Headless tests passed; 23 opt-in network/fork tests are separate. This stage confirmed29 new testnet transactions, independently audited canonical receipts and final balances, with pending0. Five local-fork checks covered expiry, roles, reserve-token creation and hold/time travel; local Ganache headers differ from Decimal, so these are not public-network confirmations. No mainnet signing or broadcast occurred.
+## Изменения
 
-Token-to-token allowance/permit cycles, ERC721 delegate/withdraw/complete, reserve-token permit stake/withdraw/complete and contract-owner Safe Call/DelegateCall restored their stated baselines. Current Token Center fees are queried instead of old hardcoded creation defaults. Legacy SDK Safe forms are routed to the weighted wallet implementation.
+Импорт приватного ключа, независимые профили, совместимая миграция BIP39-хранилища, взвешенные Safe с contract-подписями и DelegateCall, зашифрованные файлы чеков, allowance/permit-сценарии, актуальные NFT ABI и понятные описания истории. Внутренняя ошибка Safe показывается отдельно от успешной внешней квитанции.
 
-Mainnet NFT delegation is currently paused on the registry contract. The wallet checks pause before preparing new approval/delegation. It does not attempt governance unpause or substitute the testnet combined ABI. Bridge is excluded by user instruction. Rare ABI/role combinations and native Linux/macOS/ARM64 execution still need their recorded validation scope; all118 SDK builders do not mean all possible chain-admin operations are implemented or certified.
+Токен-токен обмен, ERC721 delegate/withdraw/complete, стейкинг резервного ERC20 с permit и Safe Call/DelegateCall проверены с восстановлением заявленных исходных состояний стенда. Комиссии Token Center запрашиваются из сети. Legacy Safe-формы SDK перенаправлены на реализацию взвешенного Safe в кошельке.
 
-Six self-contained binaries are built; Windows x64 passes the final-file self-test. Versioned assets and permanent-name copies share verified SHA256 hashes. DOWNLOADS.json identifies the exact version; SHA256SUMS.txt covers both names. GitHub latest links require a published stable release and exclude draft/prerelease.
+При запуске кошелек один раз проверяет публичный alpha-релиз GitHub. Новая версия показывается в небольшом окне с текущим и доступным номером; кнопка «Обновить» открывает файл для вашей платформы. При актуальной версии или отсутствии сети уведомление не появляется. Автоматическая замена файлов не выполняется. Запрос содержит только обращение к публичным сведениям о релизе, без адресов кошелька, seed-фраз, ключей и балансов.
 
-See docs/VALIDATION-COMPLETION.md, docs/CAPABILITIES.md and the three ABI audit reports in the tagged source. This remains an unsigned alpha; no public GitHub release has been made.
+## Проверки и происхождение сборок
+
+Локальный автоматический прогон: 342 Core + 37 Avalonia Headless тестов; 23 сетевых/fork-теста запускаются отдельно по явному включению. Дополнительный Core-тест проверяет остановку локального HTTP-стенда с незавершенным запросом. JSON-эталоны сравниваются независимо от переводов строк ОС, точное сравнение calldata и значений сохранено.
+
+[Native checks](https://github.com/maxwell2010/DCWallet/actions/workflows/check.yml) выполняет тесты, проверку фактической архитектуры процесса, запуск собранных файлов и проверку пакетов на шести нативных runners. Конкретный итог и commit SHA доступны в выбранном прогоне Actions. Публикация alpha допускается только из успешного прогона; ссылка на него и коммит фиксируются в описании релиза. Этот файл не заменяет результат Actions.
+
+Исходный коммит сохраняется неизменяемым тегом `build/0.2.0-alpha.3`; тег `alpha` указывает на текущую публикацию канала.
+
+Ранее подтверждены 29 новых testnet-транзакций с независимой проверкой канонических квитанций и итоговых балансов, pending 0. Пять локальных fork-проверок покрыли срок чеков, роли, создание резервного токена и hold/time travel. Заголовки Ganache отличаются от Decimal, поэтому fork-проверки не считаются подтверждениями публичной сети. Подпись и отправка mainnet-транзакций не выполнялись.
+
+## Ограничения alpha
+
+Mainnet NFT-делегирование ограничено паузой registry-контракта. Кошелек проверяет паузу до подготовки нового разрешения или делегирования и показывает сообщение. Подмена testnet ABI и попытка unpause не выполняются. Мост исключен по указанию пользователя.
+
+Редкие комбинации ABI/ролей и административные методы не сертифицированы текущим live-прогоном. Каталог 118 builders не означает реализацию всех возможных административных операций сети. Сборки без сертификатов подписи, macOS без notarization; независимый аудит безопасности не проводился.
+
+См. [функциональный отчет](https://github.com/maxwell2010/DCWallet/blob/main/docs/VALIDATION-COMPLETION.md), [матрицу возможностей](https://github.com/maxwell2010/DCWallet/blob/main/docs/CAPABILITIES.md), [нативный CI](https://github.com/maxwell2010/DCWallet/blob/main/docs/NATIVE-CI.md) и три ABI-отчета в исходниках.

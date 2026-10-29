@@ -27,9 +27,11 @@ public sealed class PortfolioTests
                 window.Show(); Click(window, "Только просмотр"); Fields(window).First().Text = DiscoveryFixture.Owner; Click(window, "Открыть для просмотра");
                 await Wait(window, "TEST   1.2346");
                 Assert.Contains(window.GetLogicalDescendants().OfType<TextBlock>(), t => ToolTip.GetTip(t)?.ToString() == "Точно: 1.234567 TEST");
-                Assert.Contains(Labels(window), t => t == "Баланс подтвержден в выбранной сети");
+                // Native balance and token discovery complete independently.
+                await Wait(window, "Баланс подтвержден в выбранной сети");
                 Click(window, "Токены"); var contract = Fields(window).Single(); contract.Text = DiscoveryFixture.Token;
-                Click(window, "Обновить все активы"); await Task.Delay(200);
+                Click(window, "Обновить все активы");
+                await WaitUntil(() => window.GetLogicalDescendants().OfType<ScrollViewer>().Single(v => v.Name == "MainScroll").Content is Control { IsEnabled: true });
                 Assert.Same(contract, Fields(window).Single()); Assert.Equal(DiscoveryFixture.Token, contract.Text);
                 Click(window, "NFT"); await Wait(window, "NFT · #7");
                 var output = Environment.GetEnvironmentVariable("DC_QA_DIR") ?? Path.Combine(AppContext.BaseDirectory, "screenshots"); Directory.CreateDirectory(output);
@@ -45,7 +47,12 @@ public sealed class PortfolioTests
     static void Click(Window window, string label) => window.GetLogicalDescendants().OfType<Button>().First(b => b.Content?.ToString() == label || b.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text == label)).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
     static async Task Wait(Window window, string value)
     {
-        for (var attempt = 0; attempt < 200 && !Labels(window).Contains(value); attempt++) await Task.Delay(25);
+        await WaitUntil(() => Labels(window).Contains(value));
         Assert.Contains(value, Labels(window));
+    }
+    static async Task WaitUntil(Func<bool> ready)
+    {
+        for (var attempt = 0; attempt < 200 && !ready(); attempt++) await Task.Delay(25);
+        Assert.True(ready(), "Expected portfolio state did not arrive within 5 seconds" );
     }
 }

@@ -23,7 +23,7 @@ Categories=Office;Finance;
 DESKTOP
 cat > "$stage/DEBIAN/control" <<CONTROL
 Package: dc-wallet
-Version: ${version/-/~}
+Version: ${version/-/\~}
 Section: utils
 Priority: optional
 Architecture: $arch

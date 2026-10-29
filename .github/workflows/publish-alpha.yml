@@ -1,0 +1,91 @@
+name: Publish verified alpha
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Successful Native checks run ID from main
+        required: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: publish-alpha-channel
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_RUN: ${{ inputs.source_run }}
+    steps:
+      - name: Verify source run and all native jobs
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN" > run.json
+          jq -e --arg repo "$GH_REPO" '.status == "completed" and .conclusion == "success" and .head_repository.full_name == $repo and .head_branch == "main" and .path == ".github/workflows/check.yml"' run.json
+          gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN/jobs?per_page=100" > jobs.json
+          jq -e '([.jobs[] | select(.conclusion == "success") | .name] | sort) == (["win-x64","win-arm64","linux-x64","linux-arm64","osx-x64","osx-arm64","Verify all platform downloads"] | sort)' jobs.json
+          echo "sha=$(jq -r .head_sha run.json)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-platform-downloads
+          path: dist
+          run-id: ${{ inputs.source_run }}
+          github-token: ${{ github.token }}
+      - name: Validate complete packages and checksums
+        id: version
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content src/DCWallet/DCWallet.csproj -Raw)).Project.PropertyGroup.Version
+          if ($version -notmatch '^\d+\.\d+\.\d+-alpha\.[0-9]+$') { throw 'Only alpha versions belong in this channel' }
+          $manifest = Get-Content dist/DOWNLOADS.json -Raw | ConvertFrom-Json
+          if ($manifest.version -ne $version -or $manifest.assets.Count -ne 13) { throw 'Unexpected release manifest' }
+          # Verify original CI files before recreating the canonical manifest.
+          & bash -c 'cd dist && sha256sum -c SHA256SUMS.txt'
+          if ($LASTEXITCODE -ne 0) { throw 'CI artifact hash mismatch' }
+          ./tools/prepare-release-assets.ps1 -Version $version -Directory dist -RequirePackages
+          if ($LASTEXITCODE -ne 0) { throw 'Release asset preparation failed' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Publish public alpha channel
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum -c SHA256SUMS.txt)
+          # Keep an immutable source reference alongside the moving alpha channel.
+          source_tag="build/$VERSION"
+          if gh api "repos/$GH_REPO/git/ref/tags/$source_tag" > source-tag.json 2>/dev/null; then
+            test "$(jq -r .object.sha source-tag.json)" = "$SOURCE_SHA"
+          else
+            gh api --method POST "repos/$GH_REPO/git/refs" -f "ref=refs/tags/$source_tag" -f "sha=$SOURCE_SHA" > /dev/null
+          fi
+          cp docs/RELEASE_NOTES.md release-notes.md
+          printf '\nNative CI: https://github.com/%s/actions/runs/%s\nSource commit: %s\nImmutable source tag: %s\n' "$GH_REPO" "$SOURCE_RUN" "$SOURCE_SHA" "$source_tag" >> release-notes.md
+          if gh release view alpha > /dev/null 2>&1; then
+            # Hide the channel while replacing assets, so mixed versions are never public.
+            gh release edit alpha --draft=true
+            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/alpha" -f "sha=$SOURCE_SHA" -F force=true > /dev/null
+            mapfile -t old_assets < <(gh release view alpha --json assets --jq '.assets[].name')
+            for asset in "${old_assets[@]}"; do gh release delete-asset alpha "$asset" --yes; done
+          else
+            gh release create alpha --target "$SOURCE_SHA" --draft --prerelease --title "DC WALLET $VERSION" --notes-file release-notes.md
+          fi
+          mapfile -t assets < <(jq -r '.assets[] | .file, .versionedFile' dist/DOWNLOADS.json)
+          files=(dist/DOWNLOADS.json dist/SHA256SUMS.txt)
+          for asset in "${assets[@]}"; do files+=("dist/$asset"); done
+          gh release upload alpha "${files[@]}"
+          gh release edit alpha --draft=false --prerelease --latest=false --title "DC WALLET $VERSION" --notes-file release-notes.md
+          gh release view alpha --json url,isDraft,isPrerelease,assets --jq '{url,isDraft,isPrerelease,assetCount:(.assets|length)}'
