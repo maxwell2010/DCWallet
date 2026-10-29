@@ -37,8 +37,7 @@ public sealed class UpdatePromptTests
                 Assert.NotEqual(((ISolidColorBrush)button.Background!).Color, ((ISolidColorBrush)button.Foreground!).Color);
                 var output = Environment.GetEnvironmentVariable("DC_QA_DIR") ?? Path.Combine(AppContext.BaseDirectory, "screenshots");
                 Directory.CreateDirectory(output);
-                using var frame = prompt.CaptureRenderedFrame(); Assert.NotNull(frame);
-                frame.Save(Path.Combine(output, theme + "-update-prompt.png"));
+                await UiFrameCapture.SaveAsync(prompt, Path.Combine(output, theme + "-update-prompt.png"));
                 button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 await modal; Assert.Equal(download, opened);
             }

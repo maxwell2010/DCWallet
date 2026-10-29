@@ -31,12 +31,12 @@ public sealed class UpdateConsentTests
                     Assert.Contains(dialog.GetLogicalDescendants().OfType<TextBlock>(), t => t.Text?.Contains("IP-адрес") == true);
                     Assert.Contains(dialog.GetLogicalDescendants().OfType<Button>(), b => b.Content?.ToString() == "Политика конфиденциальности на GitHub");
                     var allow = dialog.GetLogicalDescendants().OfType<Button>().Single(b => b.Content?.ToString() == "Проверять");
+                    dialog.UpdateLayout();
                     var position = allow.TranslatePoint(new Point(allow.Bounds.Width / 2, allow.Bounds.Height / 2), dialog)!.Value;
                     dialog.MouseMove(position); await Task.Delay(30);
                     var output = Environment.GetEnvironmentVariable("DC_QA_DIR") ?? Path.Combine(AppContext.BaseDirectory, "screenshots");
                     Directory.CreateDirectory(output);
-                    using var frame = dialog.CaptureRenderedFrame(); Assert.NotNull(frame);
-                    frame.Save(Path.Combine(output, theme + "-update-consent-hover.png"));
+                    await UiFrameCapture.SaveAsync(dialog, Path.Combine(output, theme + "-update-consent-hover.png"));
                     Click(dialog, enabled ? "Проверять" : "Не проверять");
                     Assert.Equal(enabled, await result);
                 }
