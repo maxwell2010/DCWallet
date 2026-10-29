@@ -1,6 +1,6 @@
 # Code signing policy
 
-Status: Application submitted to SignPath Foundation on 2026-10-29 through its official form. Receipt was confirmed by the form and an automated email. Review is pending; DC WALLET has not been accepted by SignPath, and no published file is represented as SignPath-signed. macOS signing and notarization remain unchanged.
+Status: Application submitted to SignPath Foundation on 2026-10-29 through its official form. Receipt was confirmed by the form and an automated email. On 2026-10-29 the Foundation declined the free-program application for insufficient public visibility/reputation signals and invited reapplication after broader recognition. DC WALLET has not been accepted by SignPath, and no published file is represented as SignPath-signed. macOS signing and notarization remain unchanged.
 
 ## Project and scope
 

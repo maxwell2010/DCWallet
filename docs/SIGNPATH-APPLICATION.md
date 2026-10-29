@@ -1,6 +1,6 @@
 # SignPath Foundation application preparation
 
-Submitted 2026-10-29 via https://signpath.org/apply. The form displayed "Form submitted - Thank you, we'll be in touch soon." The maintainer also received the automated "Open Source Project Submitted" email. Status: review pending, not approved; no SignPath certificate or signing service is configured. Existing public binaries are unsigned. macOS is unchanged.
+Submitted 2026-10-29 via https://signpath.org/apply. The form displayed "Form submitted - Thank you, we'll be in touch soon." The maintainer also received the automated "Open Source Project Submitted" email. Status: the Foundation declined this free-program application on 2026-10-29 because the project does not yet show sufficient public trust and visibility signals. The response explicitly says this is not a judgment on code quality or project potential, and welcomes reapplication after broader recognition. No SignPath certificate or signing service is configured. Existing public binaries are unsigned. macOS is unchanged.
 
 The official [application page](https://signpath.org/apply) embeds a dynamic HubSpot form. Project, repository, homepage, download/privacy URLs, description, reputation evidence, GitHub Actions, individual maintainer type and contact details were supplied. Required Code of Conduct and personal-data-processing consent were explicitly confirmed by the maintainer before submission. Optional marketing consent was left unchecked. Private contact details and security screenshots are not published here.
 
