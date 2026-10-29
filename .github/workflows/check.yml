@@ -34,10 +34,18 @@ jobs:
           dotnet-version: 8.0.x
       - name: Runtime information
         run: dotnet --info
+      - name: Dependency vulnerability audit
+        shell: pwsh
+        run: |
+          dotnet restore DCWallet.sln -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'Restore or vulnerability audit failed' }
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          dotnet list DCWallet.sln package --vulnerable --include-transitive --format json --output-version 1 > artifacts/dependency-audit.json
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency audit report failed' }
       - name: Core tests
-        run: dotnet test tests/DCWallet.Tests -c Release --logger trx -p:NuGetAudit=false -warnaserror
+        run: dotnet test tests/DCWallet.Tests -c Release --logger trx -warnaserror
       - name: Avalonia Headless tests
-        run: dotnet test tests/DCWallet.UiTests -c Release --logger trx -p:NuGetAudit=false -warnaserror
+        run: dotnet test tests/DCWallet.UiTests -c Release --logger trx -warnaserror
       - name: Publish native binary
         shell: pwsh
         run: |
@@ -94,6 +102,7 @@ jobs:
           name: logs-${{ matrix.rid }}
           path: |
             artifacts/native/
+            artifacts/dependency-audit.json
             artifacts/screenshots/
             tests/**/TestResults/*.trx
           retention-days: 7

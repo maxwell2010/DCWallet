@@ -39,6 +39,13 @@ public sealed partial class MainWindow
     private void FlushPortfolioNotification() { if (portfolioNotificationPending) NotifyPortfolio(); }
     private HistoryPage? historyData;
     private string historyOwner = "";
+    private void ClearWalletData()
+    {
+        dataOwner = ""; dataChain = 0; dataReadAt = default;
+        nativeBalance = null; tokenData = null; nftData = null; stakeData = null;
+        tokenValues.Clear(); dataErrors.Clear();
+        historyData = null; historyOwner = ""; manuallyVerifiedHistory.Clear();
+    }
     private void CancelDataLoads() { dataGeneration++; historyGeneration++; dataCancellation?.Cancel(); historyCancellation?.Cancel(); valuationCancellation?.Cancel(); dataLoading = false; historyLoading = false; portfolioNotificationPending = false; dataChanged = null; historyChanged = null; }
     private void DataPage(Action render)
     {

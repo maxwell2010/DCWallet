@@ -23,7 +23,7 @@ public sealed class ReleaseUpdateClientTests
     [InlineData("0.2.0-alpha.3+old", "0.2.0-alpha.3+new", false)]
     [InlineData("0.2.0-alpha.3", "0.2.0", true)]
     [InlineData("0.2.0", "0.2.0-alpha.10", false)]
-    [InlineData("0.2.0", "0.3.0-alpha.1", true)]
+    [InlineData("0.2.0", "0.3.0-alpha.1", false)]
     [InlineData("0.2.0-alpha.3", "0.2.0-alpha.03", false)]
     [InlineData("alpha", "0.2.0-alpha.4", false)]
     [InlineData("0.2.0-alpha.3", "not-a-version", false)]
@@ -67,7 +67,7 @@ public sealed class ReleaseUpdateClientTests
     {
         using var http = new HttpClient(new Handler(request =>
         {
-            Assert.Equal("https://api.github.com/repos/maxwell2010/DCWallet/releases/tags/alpha", request.RequestUri!.AbsoluteUri);
+            Assert.Contains(request.RequestUri!.AbsoluteUri, new[] { "https://api.github.com/repos/maxwell2010/DCWallet/releases/latest", "https://api.github.com/repos/maxwell2010/DCWallet/releases/tags/alpha" });
             Assert.NotEmpty(request.Headers.UserAgent); Assert.Null(request.Headers.Authorization);
             throw new HttpRequestException("offline");
         }));
@@ -79,6 +79,53 @@ public sealed class ReleaseUpdateClientTests
     {
         using var http = new HttpClient(new Handler(_ => new(HttpStatusCode.OK) { Content = new StringContent(new string('a', 1048577), Encoding.UTF8) }));
         Assert.Null(await new ReleaseUpdateClient(http).CheckAsync("0.2.0-alpha.3"));
+    }
+
+    [Theory]
+    [InlineData("0.2.0-alpha.3")]
+    [InlineData("0.1.0")]
+    public async Task StableReleaseIsPreferredWithVersionBoundTrustedAsset(string current)
+    {
+        var requests = new List<string>();
+        var stable = Release("0.2.0").Replace("\"prerelease\":true", "\"prerelease\":false")
+            .Replace("\"tag_name\":\"alpha\"", "\"tag_name\":\"v0.2.0\"")
+            .Replace("/tag/alpha", "/tag/v0.2.0").Replace("/download/alpha/", "/download/v0.2.0/");
+        using var http = new HttpClient(new Handler(request =>
+        {
+            requests.Add(request.RequestUri!.AbsolutePath);
+            return new(HttpStatusCode.OK) { Content = new StringContent(stable) };
+        }));
+        var update = await new ReleaseUpdateClient(http).CheckAsync(current);
+        Assert.NotNull(update); Assert.Equal("0.2.0", update.NewVersion);
+        Assert.Equal(Repo + "/releases/download/v0.2.0/DCWallet-win-x64.exe", update.GetDownloadUri("win-x64")!.AbsoluteUri);
+        Assert.Single(requests); Assert.EndsWith("/latest", requests[0]);
+    }
+
+    [Fact]
+    public async Task StableInstallNeverQueriesAlphaEvenWhenLatestIsUnavailable()
+    {
+        var requests = new List<string>();
+        using var http = new HttpClient(new Handler(request =>
+        {
+            requests.Add(request.RequestUri!.AbsolutePath);
+            return new(HttpStatusCode.NotFound);
+        }));
+        Assert.Null(await new ReleaseUpdateClient(http).CheckAsync("0.2.0"));
+        Assert.Single(requests); Assert.EndsWith("/latest", requests[0]);
+    }
+
+    [Fact]
+    public async Task AlphaInstallFallsBackOnlyAfterStableProbe()
+    {
+        var requests = new List<string>();
+        using var http = new HttpClient(new Handler(request =>
+        {
+            requests.Add(request.RequestUri!.AbsolutePath);
+            return request.RequestUri.AbsolutePath.EndsWith("/latest") ? new(HttpStatusCode.NotFound)
+                : new(HttpStatusCode.OK) { Content = new StringContent(Release("0.2.0-alpha.4")) };
+        }));
+        Assert.NotNull(await new ReleaseUpdateClient(http).CheckAsync("0.2.0-alpha.3"));
+        Assert.Equal(2, requests.Count); Assert.EndsWith("/latest", requests[0]); Assert.EndsWith("/tags/alpha", requests[1]);
     }
 
     sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler

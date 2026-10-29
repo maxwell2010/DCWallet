@@ -29,7 +29,7 @@ Priority: optional
 Architecture: $arch
 Maintainer: DC WALLET contributors
 Depends: libc6, libgcc-s1, libstdc++6, libicu-dev, libssl3, libx11-6, libice6, libsm6, libfontconfig1
-Description: DC WALLET alpha for Decimal EVM
+Description: DC WALLET for Decimal EVM
  Local encrypted wallet using the Decimal C# SDK.
 CONTROL
 dpkg-deb --root-owner-group --build "$stage" "$out/dc-wallet_${version}_${arch}.deb"

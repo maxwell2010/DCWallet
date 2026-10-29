@@ -25,12 +25,20 @@ public sealed class ReleaseUpdateClient(HttpClient? client = null)
 
     public async Task<ReleaseUpdateInfo?> CheckAsync(string currentVersion, CancellationToken cancellationToken = default)
     {
+        if (!SemanticVersion.TryParse(currentVersion, out var current)) return null;
+        var stable = await CheckReleaseAsync(currentVersion, false, cancellationToken);
+        if (stable is not null || current!.Pre is null || cancellationToken.IsCancellationRequested) return stable;
+        return await CheckReleaseAsync(currentVersion, true, cancellationToken);
+    }
+
+    async Task<ReleaseUpdateInfo?> CheckReleaseAsync(string currentVersion, bool alpha, CancellationToken cancellationToken)
+    {
         try
         {
             if (!SemanticVersion.TryParse(currentVersion, out var current)) return null;
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(TimeSpan.FromSeconds(7));
-            using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/repos/maxwell2010/DCWallet/releases/tags/alpha");
+            using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/repos/maxwell2010/DCWallet/releases/" + (alpha ? "tags/alpha" : "latest"));
             request.Headers.UserAgent.ParseAdd("DCWallet-update-check/1.0");
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
             using var response = await (client ?? DefaultClient).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
@@ -47,25 +55,28 @@ public sealed class ReleaseUpdateClient(HttpClient? client = null)
             }
             using var json = JsonDocument.Parse(bytes.ToArray());
             var root = json.RootElement;
-            if (root.GetProperty("draft").GetBoolean() || root.GetProperty("tag_name").GetString() != "alpha" ||
-                root.GetProperty("html_url").GetString() != Repository + "/releases/tag/alpha") return null;
+            if (root.GetProperty("draft").GetBoolean()) return null;
+            var tag = root.GetProperty("tag_name").GetString();
             var title = root.GetProperty("name").GetString();
             const string prefix = "DC WALLET ";
             if (title is null || !title.StartsWith(prefix, StringComparison.Ordinal)) return null;
             var version = title[prefix.Length..];
             if (!SemanticVersion.TryParse(version, out var available) || available!.CompareTo(current!) <= 0) return null;
+            if (alpha ? tag != "alpha" : tag != "v" + version || available.Pre is not null || root.GetProperty("prerelease").GetBoolean()) return null;
+            var releaseUrl = Repository + "/releases/tag/" + tag;
+            if (root.GetProperty("html_url").GetString() != releaseUrl) return null;
             var downloads = new Dictionary<string, Uri>();
             foreach (var asset in root.GetProperty("assets").EnumerateArray())
             {
                 foreach (var entry in Assets)
                 {
-                    var url = Repository + "/releases/download/alpha/" + entry.Value;
+                    var url = Repository + "/releases/download/" + tag + "/" + entry.Value;
                     if (asset.GetProperty("name").GetString() == entry.Value && asset.GetProperty("browser_download_url").GetString() == url)
                         downloads.TryAdd(entry.Key, new Uri(url));
                 }
             }
             if (downloads.Count == 0) return null;
-            return new(currentVersion, version, new Uri(Repository + "/releases/tag/alpha"), downloads);
+            return new(currentVersion, version, new Uri(releaseUrl), downloads);
         }
         catch (Exception error) when (error is HttpRequestException or OperationCanceledException or JsonException or InvalidOperationException or KeyNotFoundException or FormatException or IOException)
         {

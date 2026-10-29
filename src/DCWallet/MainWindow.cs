@@ -78,6 +78,7 @@ public sealed partial class MainWindow : Window
     private void Lock()
     {
         CancelDataLoads();
+        ClearWalletData();
         epoch++; signer?.Dispose(); signer = null; watchAddress = null; Invalidate(); account.Text = "Кошелек заблокирован"; ShowAccess();
     }
     private void ShowReceive()

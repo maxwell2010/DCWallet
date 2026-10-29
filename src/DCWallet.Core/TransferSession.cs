@@ -49,21 +49,38 @@ public sealed class TransferSession(DecimalClient client, string journalDirector
             Directory.CreateDirectory(journalDirectory);
             var entry = new JournalEntry(approved.Signed.Hash, approved.Draft.From, approved.Draft.To, approved.Draft.ValueWei.ToString(), approved.ChainId, "sending", DateTimeOffset.UtcNow);
             var file = Path.Combine(journalDirectory, approved.Signed.Hash + ".json");
-            await File.WriteAllTextAsync(file, JsonSerializer.Serialize(entry));
+            await WriteJournalAsync(file, entry);
             try
             {
                 var result = await client.BroadcastAsync(approved.Signed);
                 if (!string.Equals(result.Hash, approved.Signed.Hash, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("RPC вернул другой хэш. Проверьте локальный хэш транзакции в журнале.");
-                await File.WriteAllTextAsync(file, JsonSerializer.Serialize(entry with { State = "submitted" }));
+                await WriteJournalAsync(file, entry with { State = "submitted" });
                 return result;
             }
             catch
             {
-                await File.WriteAllTextAsync(file, JsonSerializer.Serialize(entry with { State = "unknown-check-hash" }));
+                await WriteJournalAsync(file, entry with { State = "unknown-check-hash" });
                 throw;
             }
         }
         finally { gate.Release(); }
+    }
+    private static async Task WriteJournalAsync(string path, JournalEntry entry)
+    {
+        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                await JsonSerializer.SerializeAsync(stream, entry);
+                await stream.FlushAsync();
+                stream.Flush(flushToDisk: true);
+            }
+            // A failed state replacement preserves the previous complete hash record.
+            if (File.Exists(path)) File.Replace(temporary, path, null);
+            else File.Move(temporary, path, overwrite: false);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 }
