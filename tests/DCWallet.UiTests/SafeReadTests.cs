@@ -36,11 +36,11 @@ public sealed class SafeReadTests
     static void Click(Window window,string label)=>window.GetLogicalDescendants().OfType<Button>().First(b=>b.Content?.ToString()==label||b.GetLogicalDescendants().OfType<TextBlock>().Any(t=>t.Text==label)).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
     sealed class SafeRpc:IDisposable
     {
-        readonly HttpListener listener=new();public string Url{get;}public int Broadcasts;
+        readonly TestHttpListener listener=new();public string Url{get;}public int Broadcasts;
         public SafeRpc()
         {
             var socket=new TcpListener(IPAddress.Loopback,0);socket.Start();var port=((IPEndPoint)socket.LocalEndpoint).Port;socket.Stop();Url=$"http://127.0.0.1:{port}/";listener.Prefixes.Add(Url);listener.Start();
-            _=Task.Run(async()=>{while(listener.IsListening){HttpListenerContext context;try{context=await listener.GetContextAsync();}catch{break;}try{
+            _=Task.Run(async()=>{while(listener.IsListening){TestHttpContext context;try{context=await listener.GetContextAsync();}catch{break;}try{
                 using var doc=JsonDocument.Parse(await new StreamReader(context.Request.InputStream).ReadToEndAsync());var root=doc.RootElement;var method=root.GetProperty("method").GetString();object result="0x0";
                 if(method=="eth_chainId")result="0x4b";else if(method=="eth_blockNumber")result="0x64";else if(method=="eth_getCode")result="0x60006000";
                 else if(method=="eth_call")

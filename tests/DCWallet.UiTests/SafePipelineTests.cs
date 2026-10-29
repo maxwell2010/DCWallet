@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
@@ -8,6 +8,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using DCWallet.Core;
+using DCWallet.Tests;
 using Decimal.Web3;
 using Decimal.Web3.Wallet;
 using Xunit;
@@ -53,11 +54,11 @@ public sealed class SafePipelineTests
     sealed class SafePipelineRpc:IDisposable
     {
         public const string Safe="0x2222222222222222222222222222222222222222";
-        readonly HttpListener listener=new();readonly string owner;public string Url{get;}public string ProposalHash="0x"+new string('a',64);public int Broadcasts,Simulations;
+        readonly TestHttpListener listener=new();readonly string owner;public string Url{get;}public string ProposalHash="0x"+new string('a',64);public int Broadcasts,Simulations;
         public SafePipelineRpc(string owner,bool failInternal)
         {
             this.owner=owner;var socket=new TcpListener(IPAddress.Loopback,0);socket.Start();var port=((IPEndPoint)socket.LocalEndpoint).Port;socket.Stop();Url=$"http://127.0.0.1:{port}/";listener.Prefixes.Add(Url);listener.Start();
-            _=Task.Run(async()=>{while(listener.IsListening){HttpListenerContext context;try{context=await listener.GetContextAsync();}catch{break;}try{
+            _=Task.Run(async()=>{while(listener.IsListening){TestHttpContext context;try{context=await listener.GetContextAsync();}catch{break;}try{
                 using var doc=JsonDocument.Parse(await new StreamReader(context.Request.InputStream).ReadToEndAsync());var root=doc.RootElement;var method=root.GetProperty("method").GetString();object result="0x0";
                 if(method=="eth_chainId")result="0x4b";else if(method=="eth_blockNumber")result="0x64";else if(method=="eth_getCode")result="0x60006000";
                 else if(method=="eth_getBalance")result="0x56bc75e2d63100000";else if(method=="eth_gasPrice")result="0x1";else if(method=="eth_estimateGas")result="0x186a0";

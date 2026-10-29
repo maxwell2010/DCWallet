@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace DCWallet.Tests;
 internal sealed class FakeRpc : IDisposable
 {
-    private readonly HttpListener listener = new();
+    private readonly TestHttpListener listener = new();
     private readonly Task loop;
     public string Url { get; }
     public string Chain { get; init; } = "0x4b";
@@ -20,7 +20,7 @@ internal sealed class FakeRpc : IDisposable
         {
             while (listener.IsListening)
             {
-                HttpListenerContext context;
+                TestHttpContext context;
                 try { context = await listener.GetContextAsync(); } catch { break; }
                 using var doc = JsonDocument.Parse(await new StreamReader(context.Request.InputStream).ReadToEndAsync());
                 var root = doc.RootElement; var method = root.GetProperty("method").GetString();

@@ -50,7 +50,8 @@ public class CatalogEncodingTests
         var fixture=new DraftFixture(id,JsonSerializer.Serialize(args,OperationCatalog.Json),draft.To,draft.ValueWei.ToString(),draft.Data);
         if(Environment.GetEnvironmentVariable("DC_GENERATE_FIXTURES")=="1") { Directory.CreateDirectory(root); await File.WriteAllTextAsync(path,JsonSerializer.Serialize(fixture,new JsonSerializerOptions{WriteIndented=true})); }
         var expected=JsonSerializer.Deserialize<DraftFixture>(await File.ReadAllTextAsync(path))!;
-        Assert.Equal(id,expected.Id); Assert.Equal(fixture.Input,expected.Input); Assert.Equal(expected.Target,draft.To); Assert.Equal(expected.Value,draft.ValueWei.ToString()); Assert.Equal(expected.Calldata,draft.Data);
+        // JSON indentation uses platform line endings; calldata and values stay byte-exact.
+        Assert.Equal(id,expected.Id); Assert.Equal(fixture.Input.ReplaceLineEndings("\n"),expected.Input.ReplaceLineEndings("\n")); Assert.Equal(expected.Target,draft.To); Assert.Equal(expected.Value,draft.ValueWei.ToString()); Assert.Equal(expected.Calldata,draft.Data);
     }
     static object? SampleSpecial(Operation op,ParameterInfo p)
     {

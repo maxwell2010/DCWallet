@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -35,11 +35,11 @@ internal sealed class DiscoveryCatalogHandler : HttpMessageHandler
     }
 internal sealed class DiscoveryRpc : IDisposable
     {
-        readonly HttpListener listener=new(); public string Url {get;} public string Chain {get;init;}="0x4b"; public string NftOwner {get;init;}=DiscoveryFixture.Token; public bool Reorg {get;init;} public int Broadcasts; int blocks;
+        readonly TestHttpListener listener=new(); public string Url {get;} public string Chain {get;init;}="0x4b"; public string NftOwner {get;init;}=DiscoveryFixture.Token; public bool Reorg {get;init;} public int Broadcasts; int blocks;
         public DiscoveryRpc()
         {
             var socket=new TcpListener(IPAddress.Loopback,0);socket.Start();var port=((IPEndPoint)socket.LocalEndpoint).Port;socket.Stop();Url=$"http://127.0.0.1:{port}/";listener.Prefixes.Add(Url);listener.Start();
-            _=Task.Run(async()=> {while(listener.IsListening) {HttpListenerContext context;try{context=await listener.GetContextAsync();}catch{break;} try {
+            _=Task.Run(async()=> {while(listener.IsListening) {TestHttpContext context;try{context=await listener.GetContextAsync();}catch{break;} try {
                 using var doc=JsonDocument.Parse(await new StreamReader(context.Request.InputStream).ReadToEndAsync());var root=doc.RootElement;var method=root.GetProperty("method").GetString();object? result;
                 if(method=="eth_chainId")result=Chain;
                 else if(method=="eth_getBalance")result="0xde0b6b3a7640000";
