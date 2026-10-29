@@ -21,7 +21,7 @@ if ($Preview) {
 } elseif (!$IdentityName -or !$Publisher -or !$PublisherDisplayName) { throw 'Copy IdentityName, Publisher and PublisherDisplayName from Partner Center, or use -Preview for CI only' }
 if ($IdentityName -notmatch '^[A-Za-z0-9.-]{3,50}$' -or !$Publisher.StartsWith('CN=') -or $PublisherDisplayName.Length -gt 256) { throw 'Invalid package identity' }
 $root = Split-Path -Parent $PSScriptRoot
-if (!$PublishDirectory) { $PublishDirectory = Join-Path $root "artifacts/publish/$Runtime" }
+if (!$PublishDirectory) { $PublishDirectory = Join-Path $root "artifacts/publish-store/$Runtime" }
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $root 'artifacts/msix' }
 $binary = Join-Path $PublishDirectory 'DCWallet.exe'
 if (!(Test-Path -LiteralPath $binary -PathType Leaf)) { throw 'Publish the self-contained app first' }

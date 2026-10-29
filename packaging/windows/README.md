@@ -5,8 +5,11 @@ Preview packages are unsigned CI validation artifacts with a fictitious identity
 Publish the Store-specific self-contained build first. Preview example:
 
 ```powershell
+dotnet publish src/DCWallet/DCWallet.csproj -c Release -r win-x64 --self-contained true -p:StoreDistribution=true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:DebugType=None -warnaserror -o artifacts/publish-store/win-x64
 ./tools/package-msix.ps1 -Runtime win-x64 -AppVersion 0.2.0 -PackageVersion 1.0.0.0 -Preview
 ```
+
+The default payload directory is artifacts/publish-store/RUNTIME. The Store compile flag disables external GitHub updates; the application also detects Windows package identity at runtime. The Actions workflow executes the payload's runtime-info probe and requires the store distribution marker on the native target architecture before packing.
 
 For a real submission, reserve the product in Partner Center and copy all identity values exactly from Product identity:
 
