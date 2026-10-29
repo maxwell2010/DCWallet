@@ -77,6 +77,18 @@ public sealed partial class MainWindow
         EndCard(); page.Children.Add(Text("Вид", 19)); page.Children.Add(Text("Тема", 14));
         var themes = Segments(("Как в системе", () => ChangeTheme("system")), ("Темная", () => ChangeTheme("dark")), ("Светлая", () => ChangeTheme("light")), ("Криптопанк", () => ChangeTheme("neon")));
         ((Button)themes.Children[preferences.Theme == "system" ? 0 : preferences.Theme == "dark" ? 1 : preferences.Theme == "neon" ? 3 : 2]).Background = UiPalette.Card;
+        if (OperatingSystem.IsWindows())
+        {
+            page.Children.Add(Text("Обновления", 19));
+            if (DistributionPolicy.UsesStoreUpdates) page.Children.Add(Text("Обновления устанавливаются через Microsoft Store. Проверка GitHub отключена.", 13, Muted));
+            else
+            {
+                var updates = new CheckBox { Content = "Проверять новые версии на GitHub при запуске", IsChecked = preferences.CheckForUpdatesWindows == true, Name = "WindowsUpdateChecks" };
+                page.Children.Add(updates);
+                page.Children.Add(Text("GitHub получает IP-адрес и обычные данные HTTPS-запроса. Данные кошелька не передаются. При выключении проверки запросов версий нет.", 13, Muted));
+                updates.IsCheckedChanged += (_, _) => { preferences.CheckForUpdatesWindows = updates.IsChecked == true; preferences.Save(dataDirectory); };
+            }
+        }
         page.Children.Add(Text("Окно и трей", 19));
         var minimize = new CheckBox { Content = "Сворачивать в трей", IsChecked = preferences.MinimizeToTray }; var close = new CheckBox { Content = "Закрывать в трей: крестик прячет окно", IsChecked = preferences.CloseToTray }; page.Children.Add(minimize); page.Children.Add(close);
         minimize.IsCheckedChanged += (_, _) => { preferences.MinimizeToTray = minimize.IsChecked == true; preferences.Save(dataDirectory); };
@@ -86,6 +98,17 @@ public sealed partial class MainWindow
         page.Children.Add(Text("DC WALLET " + AppInfo.Version + "\nФайл кошелька: " + VaultPath, 12, Muted));
     }
     private void ChangeTheme(string theme) { preferences.Theme = theme; preferences.Save(dataDirectory); ApplyTheme(); ShowSettings(); }
+    internal async Task<bool> EnsureWindowsUpdateConsentAsync()
+    {
+        if (!OperatingSystem.IsWindows()) return true;
+        if (DistributionPolicy.UsesStoreUpdates) return false;
+        if (preferences.CheckForUpdatesWindows is bool enabled) return enabled;
+        var choice = await new UpdateConsentWindow { RequestedThemeVariant = ActualThemeVariant }.ShowDialog<bool?>(this);
+        if (choice is null) return false;
+        preferences.CheckForUpdatesWindows = choice;
+        preferences.Save(dataDirectory);
+        return choice == true;
+    }
     private async Task ExportBackup()
     {
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions { SuggestedFileName = "dc-wallet-backup.vault", Title = "Сохранить зашифрованный кошелек" });

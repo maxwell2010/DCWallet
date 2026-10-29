@@ -1,5 +1,7 @@
 # DC WALLET
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 [![Native checks](https://github.com/maxwell2010/DCWallet/actions/workflows/check.yml/badge.svg)](https://github.com/maxwell2010/DCWallet/actions/workflows/check.yml)
 
 Нативные сборки и результаты проверок: [GitHub Actions](https://github.com/maxwell2010/DCWallet/actions/workflows/check.yml). Целевой публичный релиз - 0.2.0; публикация допускается после успешного нативного прогона. Мост исключен; mainnet NFT-делегирование сохраняет проверку паузы контракта.
@@ -18,6 +20,16 @@
 | macOS Apple Silicon | [Приложение .app.zip](https://github.com/maxwell2010/DCWallet/releases/latest/download/DCWallet-osx-arm64.app.zip) |
 
 [Контрольные суммы SHA-256](https://github.com/maxwell2010/DCWallet/releases/latest/download/SHA256SUMS.txt) и [манифест файлов и версии](https://github.com/maxwell2010/DCWallet/releases/latest/download/DOWNLOADS.json). Сборки пока без сертификатов подписи; macOS без notarization. Независимый аудит безопасности не проводился.
+
+## Лицензия, SignPath и Microsoft Store
+
+Оригинальный код и документация распространяются по [MIT](LICENSE). Лицензии SDK и сторонних компонентов сохранены отдельно: [атрибуция](THIRD-PARTY-NOTICES.md).
+
+Подготовлены [черновик заявки SignPath](docs/SIGNPATH-APPLICATION.md) и [Code signing policy](docs/CODE-SIGNING-POLICY.md). Заявка не отправлена, одобрение и сертификат не получены. Ранее опубликованные файлы остаются неподписанными. В Windows portable перед первым GitHub-запросом обновления можно разрешить или отключить проверку; выбор сохраняется в настройках. [Проект политики конфиденциальности](docs/PRIVACY.md) требует проверки и контактных данных издателя перед подачей в Store.
+
+[MSIX-подготовка в Actions](https://github.com/maxwell2010/DCWallet/actions/workflows/store-msix.yml) собирает x64 и ARM64 с отключенным внешним updater и проверяет упаковку/распаковку. Артефакты `msix-preview-*` используют тестовую identity и не предназначены для установки обычными пользователями или отправки в Store. Для полной версии криптокошелька нужен подтвержденный Company account и реальные значения Partner Center. [Упаковка](packaging/windows/README.md), [подготовка отправки](docs/STORE-SUBMISSION.md), [описания RU/EN](docs/STORE-LISTING.md).
+
+macOS-подпись и нотариализация на этом этапе не меняются. Подготовка MIT/SignPath/MSIX не заменяет опубликованные файлы релиза 0.2.0.
 
 Нативный desktop-кошелек Decimal на C#, Avalonia и SDK из чата C SDK. Графика и геометрия иконок взяты из существующего DC WALLET. Отдельный проект не изменяет мобильный кошелек и исходный SDK.
 

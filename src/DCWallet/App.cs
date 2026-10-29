@@ -27,6 +27,11 @@ public sealed class App : Application
     static async Task CheckForUpdatesAsync(MainWindow owner)
     {
         if (Environment.GetEnvironmentVariable("DC_HEADLESS") == "1" || Interlocked.Exchange(ref updateCheckStarted, 1) != 0) return;
+        try
+        {
+            if (DistributionPolicy.UsesStoreUpdates || !await owner.EnsureWindowsUpdateConsentAsync() || !owner.IsVisible) return;
+        }
+        catch (Exception) { return; /* Consent or preferences failure must not interrupt startup. */ }
         using var closed = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         void Cancel(object? sender, EventArgs args) => closed.Cancel();
         owner.Closed += Cancel;

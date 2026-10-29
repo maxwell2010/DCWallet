@@ -1,0 +1,106 @@
+name: Request Windows signing (requires SignPath approval)
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Successful MIT-licensed Native checks run ID from main
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  request:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    environment: signpath
+    steps:
+      - name: Verify onboarding configuration and source
+        id: source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+          SIGNPATH_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          ORGANIZATION: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          PROJECT: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          POLICY: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          CONFIGURATION: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          SUBJECT: ${{ vars.SIGNPATH_EXPECTED_CERTIFICATE_SUBJECT }}
+        run: |
+          if (!$env:SIGNPATH_TOKEN -or !$env:ORGANIZATION -or !$env:PROJECT -or !$env:POLICY -or !$env:CONFIGURATION -or !$env:SUBJECT) { throw 'SignPath onboarding/configuration is incomplete; no request sent' }
+          if ($env:SOURCE_RUN -notmatch '^\d+$') { throw 'Invalid source run' }
+          $run = gh api "repos/$env:GH_REPO/actions/runs/$env:SOURCE_RUN" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $run.status -ne 'completed' -or $run.conclusion -ne 'success' -or $run.head_repository.full_name -cne $env:GH_REPO -or $run.head_branch -ne 'main' -or $run.path -ne '.github/workflows/check.yml') { throw 'A successful Native checks run from this main branch is required' }
+          "sha=$($run.head_sha)" >> $env:GITHUB_OUTPUT
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+      - name: Verify MIT source and version
+        id: version
+        shell: pwsh
+        run: |
+          if (!(Test-Path LICENSE) -or !(Get-Content LICENSE -Raw).StartsWith('MIT License')) { throw 'Selected source must include the MIT license' }
+          $version = ([xml](Get-Content src/DCWallet/DCWallet.csproj -Raw)).Project.PropertyGroup.Version
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[A-Za-z0-9.]+)?$') { throw 'Invalid version' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-win-*
+          merge-multiple: true
+          path: unsigned-source
+          run-id: ${{ inputs.source_run }}
+          github-token: ${{ github.token }}
+      - name: Select original Windows binaries
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          New-Item -ItemType Directory -Force unsigned | Out-Null
+          foreach ($rid in @('win-x64','win-arm64')) {
+            $name = "DCWallet-$env:VERSION-$rid.exe"
+            $path = Join-Path unsigned-source $name
+            $expected = (Get-Content ($path + '.sha256') -Raw).Split(' ', [StringSplitOptions]::RemoveEmptyEntries)[0].Trim()
+            if ((Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Original build checksum mismatch' }
+            Copy-Item $path "unsigned/DCWallet-$rid.exe"
+          }
+      - uses: actions/upload-artifact@v4
+        id: unsigned
+        with:
+          name: signpath-windows-input
+          path: unsigned/*.exe
+          if-no-files-found: error
+          retention-days: 7
+      - uses: signpath/github-action-submit-signing-request@4184a38a17e5b37d026a3ed443581c1f03ae1b3a
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 1800
+          output-artifact-directory: signed
+      - name: Verify returned signatures and compute final hashes
+        shell: pwsh
+        env:
+          EXPECTED_SUBJECT: ${{ vars.SIGNPATH_EXPECTED_CERTIFICATE_SUBJECT }}
+        run: |
+          $hashes = @()
+          foreach ($rid in @('win-x64','win-arm64')) {
+            $path = "signed/DCWallet-$rid.exe"
+            $signature = Get-AuthenticodeSignature $path
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -cne $env:EXPECTED_SUBJECT -or !$signature.TimeStamperCertificate) { throw 'Expected valid, timestamped SignPath signature was not returned' }
+            $hashes += "$((Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant())  DCWallet-$rid.exe"
+          }
+          $hashes | Set-Content signed/SHA256SUMS.txt -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-signed-windows
+          path: |
+            signed/DCWallet-win-x64.exe
+            signed/DCWallet-win-arm64.exe
+            signed/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14

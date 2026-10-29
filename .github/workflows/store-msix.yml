@@ -1,0 +1,80 @@
+name: Store MSIX preparation
+on:
+  push:
+    branches: [main]
+    paths: ['src/**', 'tests/**', 'tools/**', 'packaging/windows/**', 'Directory.Build.props', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'docs/PRIVACY.md', '.github/workflows/store-msix.yml']
+  pull_request:
+    paths: ['src/**', 'tests/**', 'tools/**', 'packaging/windows/**', 'Directory.Build.props', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'docs/PRIVACY.md', '.github/workflows/store-msix.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: store-msix-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  package:
+    name: MSIX ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, rid: win-x64 }
+          - { os: windows-11-arm, rid: win-arm64 }
+    env:
+      DC_HEADLESS: 1
+      DC_QA_DIR: ${{ github.workspace }}/artifacts/store-screenshots
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Store build tests and dependency audit
+        shell: pwsh
+        run: |
+          dotnet test DCWallet.sln -c Release -p:StoreDistribution=true -warnaserror --logger trx
+          if ($LASTEXITCODE -ne 0) { throw 'Store variant tests or dependency audit failed' }
+      - name: Publish native Store variant
+        shell: pwsh
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          $version = ([xml](Get-Content src/DCWallet/DCWallet.csproj -Raw)).Project.PropertyGroup.Version
+          $output = "artifacts/publish-store/$env:RID"
+          dotnet publish src/DCWallet/DCWallet.csproj -c Release -r $env:RID --self-contained true -p:StoreDistribution=true -p:Version=$version -p:PublishSingleFile=true -p:PublishTrimmed=false -p:DebugType=None -warnaserror -o $output
+          if ($LASTEXITCODE -ne 0) { throw 'Store publish failed' }
+          $binary = Join-Path $output DCWallet.exe
+          New-Item -ItemType Directory -Force artifacts/store-runtime | Out-Null
+          $info = Join-Path (Get-Location) "artifacts/store-runtime/$env:RID.json"
+          $probe = Start-Process $binary -ArgumentList '--runtime-info' -Wait -PassThru -WindowStyle Hidden -RedirectStandardOutput $info
+          if ($probe.ExitCode -ne 0) { throw 'Store runtime probe failed' }
+          $runtime = Get-Content $info -Raw | ConvertFrom-Json
+          $arch = $env:RID.Substring(4)
+          if ($runtime.distribution -ne 'store' -or $runtime.processArchitecture -ne $arch -or $runtime.osArchitecture -ne $arch) { throw 'Expected native Store payload with external updater disabled' }
+          $check = Start-Process $binary -ArgumentList '--self-test' -Wait -PassThru -WindowStyle Hidden
+          if ($check.ExitCode -ne 0) { throw 'Store final-file self-test failed' }
+      - name: Pack and unpack unsigned preview MSIX
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content src/DCWallet/DCWallet.csproj -Raw)).Project.PropertyGroup.Version
+          ./tools/package-msix.ps1 -Runtime '${{ matrix.rid }}' -AppVersion $version -PackageVersion 1.0.0.0 -Preview -PublishDirectory 'artifacts/publish-store/${{ matrix.rid }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msix-preview-${{ matrix.rid }}
+          path: |
+            artifacts/msix/*-preview.msix
+            artifacts/msix/*-preview.msix.sha256
+            artifacts/msix/*-preview.json
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: msix-logs-${{ matrix.rid }}
+          path: |
+            artifacts/store-runtime/
+            artifacts/store-screenshots/
+            tests/**/TestResults/*.trx
+          retention-days: 7

@@ -16,7 +16,8 @@ public static class Program
                 processArchitecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(),
                 osArchitecture = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant(),
                 runtimeIdentifier = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
-                framework = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription
+                framework = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+                distribution = DistributionPolicy.IsStoreBuild ? "store" : "portable"
             }));
             return 0;
         }
