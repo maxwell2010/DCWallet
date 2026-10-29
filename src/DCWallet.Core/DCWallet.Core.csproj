@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><ItemGroup><ProjectReference Include="../../vendor/Decimal.Web3/Decimal.Web3.csproj" /></ItemGroup></Project>

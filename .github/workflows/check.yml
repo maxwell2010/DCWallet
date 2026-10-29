@@ -1,0 +1,125 @@
+name: Native checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    name: ${{ matrix.rid }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, rid: win-x64 }
+          - { os: windows-11-arm, rid: win-arm64 }
+          - { os: ubuntu-22.04, rid: linux-x64 }
+          - { os: ubuntu-22.04-arm, rid: linux-arm64 }
+          - { os: macos-15-intel, rid: osx-x64 }
+          - { os: macos-15, rid: osx-arm64 }
+    runs-on: ${{ matrix.os }}
+    env:
+      DC_HEADLESS: 1
+      DC_QA_DIR: ${{ github.workspace }}/artifacts/screenshots
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Runtime information
+        run: dotnet --info
+      - name: Core tests
+        run: dotnet test tests/DCWallet.Tests -c Release --logger trx -p:NuGetAudit=false -warnaserror
+      - name: Avalonia Headless tests
+        run: dotnet test tests/DCWallet.UiTests -c Release --logger trx -p:NuGetAudit=false -warnaserror
+      - name: Publish native binary
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content src/DCWallet/DCWallet.csproj -Raw)).Project.PropertyGroup.Version
+          ./tools/publish.ps1 -Runtime '${{ matrix.rid }}' -Version $version
+      - name: Verify native architecture and published self-test
+        shell: pwsh
+        run: ./tools/check-native.ps1 -Runtime '${{ matrix.rid }}'
+      - name: Linux packages and packaged self-tests
+        if: startsWith(matrix.rid, 'linux-')
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' src/DCWallet/DCWallet.csproj)
+          sudo apt-get update
+          sudo apt-get install -y desktop-file-utils
+          arch=amd64
+          if [ "$RID" = linux-arm64 ]; then arch=arm64; fi
+          bash tools/package-linux.sh "artifacts/publish/$RID/DCWallet" "$version" "$arch" artifacts/releases
+          mkdir -p artifacts/package-check/deb artifacts/package-check/tar
+          dpkg-deb --info "artifacts/releases/dc-wallet_${version}_${arch}.deb"
+          dpkg-deb --extract "artifacts/releases/dc-wallet_${version}_${arch}.deb" artifacts/package-check/deb
+          artifacts/package-check/deb/opt/dc-wallet/DCWallet --self-test
+          tar -xzf "artifacts/releases/DCWallet-${version}-linux-${arch}.tar.gz" -C artifacts/package-check/tar
+          artifacts/package-check/tar/DCWallet --self-test
+          if [ "$RID" = linux-x64 ]; then
+            "artifacts/releases/DCWallet-${version}-x86_64.AppImage" --appimage-extract-and-run --self-test
+          fi
+      - name: macOS bundle and packaged self-test
+        if: startsWith(matrix.rid, 'osx-')
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' src/DCWallet/DCWallet.csproj)
+          bash tools/package-macos.sh "artifacts/publish/$RID/DCWallet" "$version" "$RID" artifacts/releases
+          mkdir -p artifacts/package-check
+          ditto -x -k "artifacts/releases/DCWallet-${version}-${RID}.app.zip" artifacts/package-check
+          plutil -lint "artifacts/package-check/DC WALLET.app/Contents/Info.plist"
+          "artifacts/package-check/DC WALLET.app/Contents/MacOS/DCWallet" --self-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: artifacts/releases/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: logs-${{ matrix.rid }}
+          path: |
+            artifacts/native/
+            artifacts/screenshots/
+            tests/**/TestResults/*.trx
+          retention-days: 7
+  collect:
+    name: Verify all platform downloads
+    needs: native
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: dist
+          merge-multiple: true
+      - name: Permanent asset names and hashes
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content src/DCWallet/DCWallet.csproj -Raw)).Project.PropertyGroup.Version
+          ./tools/prepare-release-assets.ps1 -Version $version -Directory dist -RequirePackages
+      - name: Verify complete checksums
+        shell: bash
+        run: cd dist && sha256sum -c SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-platform-downloads
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

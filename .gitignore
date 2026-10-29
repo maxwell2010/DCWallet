@@ -1,0 +1,17 @@
+**/bin/
+**/obj/
+**/TestResults/
+**/screenshots/
+artifacts/
+*.user
+*.vault
+*.tmp
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.pem
+*.key
+*.seed
+*.mnemonic

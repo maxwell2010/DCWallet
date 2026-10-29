@@ -1,0 +1,7 @@
+{
+  "Id": "TransactionDraft.BurnDel(String,String)",
+  "Input": "{\r\n  \u0022from\u0022: \u00220x1111111111111111111111111111111111111111\u0022,\r\n  \u0022amountDel\u0022: \u00221\u0022\r\n}",
+  "Target": "0x0000000000000000000000000000000000000000",
+  "Value": "1000000000000000000",
+  "Calldata": "0x"
+}

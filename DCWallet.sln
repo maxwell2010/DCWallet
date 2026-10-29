@@ -1,0 +1,59 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{522419CB-210A-4D25-8C3F-C8ED05B7A4CD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DCWallet", "src\DCWallet\DCWallet.csproj", "{593DB48E-2901-48B3-A0D0-ADD089557824}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DCWallet.Core", "src\DCWallet.Core\DCWallet.Core.csproj", "{01D4FCA5-B5F0-49A4-9525-D001731A214C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{49B6C3EC-4401-4154-AEDB-2FD35ADD9945}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DCWallet.Tests", "tests\DCWallet.Tests\DCWallet.Tests.csproj", "{915E6066-6C97-49D7-B5EC-53CEF443AB3F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DCWallet.UiTests", "tests\DCWallet.UiTests\DCWallet.UiTests.csproj", "{37542AEF-5217-4586-B9E4-F89FCB48C0F1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "vendor", "vendor", "{12161945-5B7C-4CE3-BC1F-2FBFA119BA2B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Decimal.Web3", "vendor\Decimal.Web3\Decimal.Web3.csproj", "{76CF5824-5AEA-477B-9253-BD9D67E2D5E2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{593DB48E-2901-48B3-A0D0-ADD089557824}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{593DB48E-2901-48B3-A0D0-ADD089557824}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{593DB48E-2901-48B3-A0D0-ADD089557824}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{593DB48E-2901-48B3-A0D0-ADD089557824}.Release|Any CPU.Build.0 = Release|Any CPU
+		{01D4FCA5-B5F0-49A4-9525-D001731A214C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{01D4FCA5-B5F0-49A4-9525-D001731A214C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{01D4FCA5-B5F0-49A4-9525-D001731A214C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{01D4FCA5-B5F0-49A4-9525-D001731A214C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{915E6066-6C97-49D7-B5EC-53CEF443AB3F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{915E6066-6C97-49D7-B5EC-53CEF443AB3F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{915E6066-6C97-49D7-B5EC-53CEF443AB3F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{915E6066-6C97-49D7-B5EC-53CEF443AB3F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{37542AEF-5217-4586-B9E4-F89FCB48C0F1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{37542AEF-5217-4586-B9E4-F89FCB48C0F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{37542AEF-5217-4586-B9E4-F89FCB48C0F1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{37542AEF-5217-4586-B9E4-F89FCB48C0F1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{76CF5824-5AEA-477B-9253-BD9D67E2D5E2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{76CF5824-5AEA-477B-9253-BD9D67E2D5E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{76CF5824-5AEA-477B-9253-BD9D67E2D5E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{76CF5824-5AEA-477B-9253-BD9D67E2D5E2}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{593DB48E-2901-48B3-A0D0-ADD089557824} = {522419CB-210A-4D25-8C3F-C8ED05B7A4CD}
+		{01D4FCA5-B5F0-49A4-9525-D001731A214C} = {522419CB-210A-4D25-8C3F-C8ED05B7A4CD}
+		{915E6066-6C97-49D7-B5EC-53CEF443AB3F} = {49B6C3EC-4401-4154-AEDB-2FD35ADD9945}
+		{37542AEF-5217-4586-B9E4-F89FCB48C0F1} = {49B6C3EC-4401-4154-AEDB-2FD35ADD9945}
+		{76CF5824-5AEA-477B-9253-BD9D67E2D5E2} = {12161945-5B7C-4CE3-BC1F-2FBFA119BA2B}
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,9 @@
+* text=auto
+*.sh text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+*.png binary
+*.ico binary
+# Keep the vendored snapshot and compiled QA fixture hashes byte-exact.
+vendor/Decimal.Web3/** -text -whitespace
+tests/DCWallet.Tests/SafeQaFixtures/** -text -whitespace

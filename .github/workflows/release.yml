@@ -1,0 +1,94 @@
+name: release-preview
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Preview version
+        default: 0.2.0-alpha.3
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, rid: win-x64 }
+          - { os: windows-11-arm, rid: win-arm64 }
+          - { os: ubuntu-22.04, rid: linux-x64 }
+          - { os: ubuntu-22.04-arm, rid: linux-arm64 }
+          - { os: macos-15, rid: osx-arm64 }
+          - { os: macos-15-intel, rid: osx-x64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet test tests/DCWallet.Tests -c Release
+      - run: dotnet test tests/DCWallet.UiTests -c Release
+        env:
+          DC_HEADLESS: 1
+      - name: Version
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { $env:INPUT_VERSION }
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[A-Za-z0-9.]+)?$') { throw 'Invalid version' }
+          "VERSION=$version" >> $env:GITHUB_ENV
+      - name: Publish
+        shell: pwsh
+        run: ./tools/publish.ps1 -Runtime '${{ matrix.rid }}' -Version $env:VERSION
+      - name: Debian and portable tar
+        if: startsWith(matrix.rid, 'linux-')
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y desktop-file-utils
+          arch=amd64; if [ "$RID" = linux-arm64 ]; then arch=arm64; fi
+          bash tools/package-linux.sh "artifacts/publish/$RID/DCWallet" "$VERSION" "$arch" artifacts/releases
+      - name: macOS bundle
+        if: startsWith(matrix.rid, 'osx-')
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+        run: bash tools/package-macos.sh "artifacts/publish/$RID/DCWallet" "$VERSION" "$RID" artifacts/releases
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: artifacts/releases
+  draft:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Permanent download names and checksums
+        shell: pwsh
+        run: ./tools/prepare-release-assets.ps1 -Version ($env:GITHUB_REF_NAME.Substring(1)) -Directory dist -RequirePackages
+      - name: Checksums and draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Publish only the verified manifest, checksums and explicitly listed assets.
+          mapfile -t assets < <(jq -r '.assets[] | .file, .versionedFile' dist/DOWNLOADS.json)
+          files=(dist/DOWNLOADS.json dist/SHA256SUMS.txt)
+          for asset in "${assets[@]}"; do files+=("dist/$asset"); done
+          (cd dist && sha256sum -c SHA256SUMS.txt)
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --prerelease --title "DC WALLET $GITHUB_REF_NAME" --notes-file docs/RELEASE_NOTES.md "${files[@]}"
