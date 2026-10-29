@@ -1,10 +1,10 @@
 # SignPath Foundation application preparation
 
-Prepared 2026-10-29. Status: draft, not submitted, not approved, no SignPath certificate or signing service is configured. Existing public binaries are unsigned. macOS is unchanged.
+Submitted 2026-10-29 via https://signpath.org/apply. The form displayed "Form submitted - Thank you, we'll be in touch soon." The maintainer also received the automated "Open Source Project Submitted" email. Status: review pending, not approved; no SignPath certificate or signing service is configured. Existing public binaries are unsigned. macOS is unchanged.
 
-The official [application page](https://signpath.org/apply) embeds a dynamic HubSpot form. The entries below are prepared application content, not a claim that every field name or validation rule in that form has been verified. Transfer the content to the current form and supply the maintainer's private contact details there.
+The official [application page](https://signpath.org/apply) embeds a dynamic HubSpot form. Project, repository, homepage, download/privacy URLs, description, reputation evidence, GitHub Actions, individual maintainer type and contact details were supplied. Required Code of Conduct and personal-data-processing consent were explicitly confirmed by the maintainer before submission. Optional marketing consent was left unchecked. Private contact details and security screenshots are not published here.
 
-## Application content in English
+## Application content and supporting references
 
 | Item | Prepared value |
 | --- | --- |
@@ -31,17 +31,17 @@ Build provenance and request:
 
 > We request free Windows code signing for our public open-source project through SignPath Foundation. GitHub Actions builds and tests Windows x64 and ARM64 from the public repository. Release files are linked to the successful source run and commit and distributed with a SHA-256 manifest. Linux and macOS checks also run natively, but this request concerns Windows artifacts. The existing 0.2.0 release predates the root MIT-license addition; please assess the reviewed, newly built MIT-licensed revision proposed for signing rather than treating the historical unsigned binaries as already approved. We understand that acceptance is discretionary, the Foundation is the certificate publisher, and each signing request requires an authorized human approver. We will not claim SignPath sponsorship or a valid signature until approval and actual signature verification.
 
-## Maintainer input and checks before sending
+## Onboarding follow-up
 
-- Provide a monitored contact email directly in the official form. No email address has been selected or published by this draft.
+- A monitored contact email was provided privately in the official form. Monitor it for the Foundation's decision or follow-up questions.
 - Confirm the maintainer's name, project ownership and role assignments. Maxim Sereda is the currently identified maintainer; additional reviewers or approvers must be real authorized people, not invented identities.
-- Confirm MFA for GitHub and the future SignPath account. This draft has not inspected account MFA settings or accepted terms on anyone's behalf.
+- GitHub MFA was confirmed from the maintainer's supplied settings screenshot. SignPath account MFA and service permissions remain onboarding steps after access is issued.
 - Review licenses of included assets and all packaged dependencies. Public source alone is not evidence of the right to relicense third-party material.
 - Confirm a public privacy policy and user controls for background network access. Windows portable builds now require a saved explicit choice before startup update checks, with a Settings opt-out. Store builds disable GitHub checking. RPC/catalog queries occur while operating a selected wallet; the blanket claim that no data reaches other networked systems would be false. The [SignPath terms](https://signpath.org/terms) require disclosure and installation controls for applicable transfers.
 - Add the policy link on the project homepage and download/release pages. After approval, use the required attribution in the policy without implying that older unsigned files are signed.
 - Replace the historical build/run references with the final reviewed MIT-licensed build selected for signing. Supply SignPath account and artifact configuration identifiers only after they are issued.
 
-No request has been sent and no service contract or account has been created by this preparation. Do not put certificate private keys, service tokens or signing credentials in this document or Git.
+The project application has been submitted. No signing request has been made, no signing credentials have been provisioned, and account activation or certificate approval has not been confirmed. Do not put certificate private keys, service tokens or signing credentials in this document or Git.
 
 ## Prepared signing workflow
 
