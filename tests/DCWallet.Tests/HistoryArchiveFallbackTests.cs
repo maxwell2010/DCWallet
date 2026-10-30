@@ -25,7 +25,7 @@ public sealed class HistoryArchiveFallbackTests
         using var primary=new FakeRpc{ReadResult=(m,a)=>Reply(m,a,h=>h==Recent)};
         using var archive=new FakeRpc{ReadResult=(m,a)=>Reply(m,a,h=>h==Old)};
         var reader=new HistoryReader(Client(primary),archiveReaderFactory:()=>Task.FromResult(new HistoryReader(Client(archive),false)));
-        var old=await reader.VerifyAsync(Old,Owner);Assert.NotNull(old);Assert.Equal("rpc",old.Verification);
+        var old=await reader.VerifyDetailedAsync(Old,Owner);Assert.NotNull(old.Row);Assert.Equal("rpc",old.Row.Verification);Assert.False(old.Details.Unavailable);
         var recent=await reader.VerifyAsync(Recent,Owner);Assert.NotNull(recent);Assert.Equal(Recent,recent.Hash);Assert.Equal("rpc",recent.Verification);
         Assert.Equal(0,primary.Broadcasts);Assert.Equal(0,archive.Broadcasts);
     }

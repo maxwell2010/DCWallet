@@ -46,6 +46,8 @@ public sealed class WalletNavigationCleanupTests
                 Assert.Contains(Labels(w),v=>v?.Contains("Данные архива")==true);
                 Assert.DoesNotContain(Labels(w),v=>v?.Contains("Перевод · Исполнено")==true);
                 await UiFrameCapture.SaveAsync(w,Path.Combine(shots,theme+"-history-clean.png"));
+                Set(w,"historyData",new HistoryPage([row with { VerificationReason="verification_failed" }],1,1,false,1,true));
+                Click(w,"История");Assert.Contains(Labels(w),v=>v?.Contains("Проверка не пройдена")==true);
             }
             finally{w.Close();Directory.Delete(dir,true);}
         }

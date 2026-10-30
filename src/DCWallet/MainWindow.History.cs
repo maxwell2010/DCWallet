@@ -29,14 +29,15 @@ public sealed partial class MainWindow
             list.Children.Clear();
             if (historyData is null) { summary.Text = historyLoading ? "Загружаем историю..." : "История еще не загружена."; return; }
             summary.Text = historyLoading ? $"Загружено операций: {historyData.Rows.Count}. Загрузка продолжается..." : $"Операций: {historyData.Rows.Count}";
-            ToolTip.SetTip(summary, $"Записей в каталоге: {historyData.Total}. Требуют дополнительной проверки: {historyData.Failed}. " + (historyData.Complete ? "Загрузка завершена." : "История может дополняться при обновлении."));
+            ToolTip.SetTip(summary, $"Записей в каталоге: {historyData.Total}. Подтверждено RPC: {historyData.Verified}. Архивных: {historyData.Archived}. Ошибок чтения: {historyData.Failed}. " + (historyData.Complete ? "Загрузка завершена." : "История может дополняться при обновлении."));
             var query = search.Text?.Trim() ?? "";
             var filtered = historyData.Rows.Where(r => query.Length == 0 || (r.Hash + " " + r.From + " " + r.To + " " + r.Kind + " " + string.Join(' ', r.Movements?.Select(m => m.Symbol) ?? [])).Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray();
             foreach (var row in filtered.Take(limit))
             {
                 var content = new StackPanel { Spacing = 7 };
-                var rowTitle = Text(row.Kind + " · " + (row.Verification.StartsWith("indexer", StringComparison.Ordinal) ? "Данные архива" : HistorySafeOutcome.DisplayStatus(row)), 16);
-                if (row.Verification != "rpc") ToolTip.SetTip(rowTitle, row.Verification.StartsWith("indexer", StringComparison.Ordinal) ? "Сведения из архива Decimal. Подтверждение через RPC пока недоступно." : "Квитанция подтверждена. Связь с кошельком указана архивом.");
+                var rowTitle = Text(row.Kind + " · " + (row.VerificationReason == "verification_failed" ? "Проверка не пройдена" : row.Verification.StartsWith("indexer", StringComparison.Ordinal) ? "Данные архива" : HistorySafeOutcome.DisplayStatus(row)), 16);
+                if (row.VerificationReason == "verification_failed") rowTitle.Foreground = UiPalette.Error;
+                if (row.Verification != "rpc") ToolTip.SetTip(rowTitle, row.VerificationReason == "verification_failed" ? "Не удалось подтвердить сведения об операции. Обновите историю или проверьте другой RPC." : row.VerificationReason == "archive_unavailable" ? "Историческая запись Decimal. Подключенные RPC не вернули старую транзакцию или квитанцию." : row.Verification.StartsWith("indexer", StringComparison.Ordinal) ? "Сведения из архива Decimal. Подтверждение через RPC пока недоступно." : "Квитанция подтверждена. Связь с кошельком указана архивом.");
                 content.Children.Add(rowTitle); content.Children.Add(Text($"{row.Timestamp.LocalDateTime:g} · Блок {row.Block}", 12, Muted));
                 foreach (var move in row.Movements ?? [])
                 {

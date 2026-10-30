@@ -15,9 +15,17 @@ public sealed record AssetMovement(string Contract, string Symbol, int? Decimals
 {
     public string Amount => Decimals is { } decimals ? Units.Format(Raw, decimals) : Raw + " (минимальные единицы)";
 }
-public sealed record HistoryRow(string Hash, BigInteger Block, DateTimeOffset Timestamp, string From, string? To, BigInteger ValueWei, BigInteger FeeWei, bool Success, string Kind, IReadOnlyList<AssetMovement>? Movements = null, string Memo = "", string Verification = "rpc", bool? InnerSuccess = null);
-public sealed record HistoryPage(IReadOnlyList<HistoryRow> Rows, int NextOffset, int Failed, bool MayHaveMore, int Total = 0, bool Complete = false, IReadOnlyList<string>? Issues = null);
-public sealed partial class HistoryReader(DecimalClient client, bool archiveFallback = true, Func<Task<HistoryReader>>? archiveReaderFactory = null)
+public sealed record HistoryRow(string Hash, BigInteger Block, DateTimeOffset Timestamp, string From, string? To, BigInteger ValueWei, BigInteger FeeWei, bool Success, string Kind, IReadOnlyList<AssetMovement>? Movements = null, string Memo = "", string Verification = "rpc", bool? InnerSuccess = null)
+{
+    public string VerificationReason { get; init; } = "";
+}
+public sealed record HistoryPage(IReadOnlyList<HistoryRow> Rows, int NextOffset, int Failed, bool MayHaveMore, int Total = 0, bool Complete = false, IReadOnlyList<string>? Issues = null)
+{
+    public int Verified => Rows.Count(r => r.Verification == "rpc");
+    public int Archived => Rows.Count(r => r.Verification.StartsWith("indexer", StringComparison.Ordinal));
+    public IReadOnlyList<HistoryVerificationDetails> VerificationDetails { get; init; } = Array.Empty<HistoryVerificationDetails>();
+}
+public sealed partial class HistoryReader(DecimalClient client, bool archiveFallback = true, Func<Task<HistoryReader>>? archiveReaderFactory = null, Func<DecimalClient, WalletDataReader>? catalogReaderFactory = null)
 {
     private volatile bool preferArchive;
     private volatile HistoryReader? archiveReader;
@@ -46,14 +54,14 @@ public sealed partial class HistoryReader(DecimalClient client, bool archiveFall
         var owner = Address(ownerInput); if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
         if (client.Network.ChainId is not (75 or 202020)) throw new InvalidOperationException("Каталог истории доступен для сетей Decimal mainnet и testnet.");
         if ((await client.Web3.Eth.ChainId.SendRequestAsync().WaitAsync(ct)).Value != client.Network.ChainId) throw new InvalidOperationException("RPC вернул другую сеть.");
-        using var http = new WalletDataReader(client);
+        using var http = catalogReaderFactory?.Invoke(client) ?? new WalletDataReader(client);
         var api = client.Network.ChainId == 75 ? "https://api.decimalchain.com" : "https://testnet-api.decimalchain.com";
         var root = await http.JsonAsync($"{api}/api/v1/txs/txs-by-address/{owner}?offset={offset}&limit=50", ct: ct);
         if (!B(root, "Ok") || P(P(root, "Result"), "txs").ValueKind != JsonValueKind.Array) throw new InvalidDataException("Неизвестный формат истории.");
         var result = P(root, "Result"); var candidates = Rows(result, "txs").ToArray(); if (candidates.Length > 500) throw new InvalidDataException("Слишком большая страница истории.");
         var count = U(S(result, "count", (offset + candidates.Length).ToString()));
         if (count > 1_000_000) throw new InvalidDataException("Слишком большой каталог истории.");
-        var total = (int)count; var rows = new ConcurrentBag<HistoryRow>(); var failed = 0;
+        var total = (int)count; var rows = new ConcurrentBag<HistoryRow>(); var details = new ConcurrentBag<HistoryVerificationDetails>(); var failed = 0;
         await Parallel.ForEachAsync(candidates, new ParallelOptions { MaxDegreeOfParallelism = 3, CancellationToken = ct }, async (candidate, token) =>
         {
             try
@@ -61,24 +69,32 @@ public sealed partial class HistoryReader(DecimalClient client, bool archiveFall
                 var evm = S(candidate, "evm_hash");
                 if (evm.Length == 0) { rows.Add(ParseLegacy(candidate)); return; }
                 if (!evm.StartsWith("0x")) evm = "0x" + evm;
-                HistoryRow? row = null;
-                try { row = await VerifyAsync(evm, owner, token, true); } catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { }
-                if (row is null) { Interlocked.Increment(ref failed); rows.Add(ParseIndexed(candidate, evm)); } else rows.Add(row);
+                var verification = await VerifyDetailedAsync(evm, owner, token, true);
+                details.Add(verification.Details);
+                if (verification.Row is { } row) rows.Add(row);
+                else
+                {
+                    // Read the archived row before incrementing errors, so a malformed row is counted once.
+                    var archived = ParseIndexed(candidate, evm) with { VerificationReason = verification.Details.Unavailable ? "archive_unavailable" : "verification_failed" };
+                    rows.Add(archived);
+                    if (!verification.Details.Unavailable) Interlocked.Increment(ref failed);
+                }
             }
             catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { Interlocked.Increment(ref failed); }
         });
         return new(rows.OrderByDescending(r => r.Block).ThenByDescending(r => r.Timestamp).ToArray(), offset + candidates.Length, failed, offset + candidates.Length < total && candidates.Length > 0, total, offset + candidates.Length >= total,
-            rows.Any(r => r.Verification != "rpc") ? new[] { "Часть старых записей и связей с адресом получена из индексатора, без полной RPC-проверки движений." } : []);
+            rows.Any(r => r.Verification != "rpc") ? new[] { "Есть архивные записи без RPC-подтверждения." } : []) { VerificationDetails = details.OrderBy(d => d.Hash).ToArray() };
     }
     public async Task<HistoryPage> ReadAllAsync(string owner, IProgress<HistoryPage>? progress = null, CancellationToken ct = default)
     {
-        var rows = new Dictionary<string, HistoryRow>(StringComparer.OrdinalIgnoreCase); var offset = 0; var failures = 0; var total = 0; var issues = new HashSet<string>(); var complete = false;
+        var rows = new Dictionary<string, HistoryRow>(StringComparer.OrdinalIgnoreCase); var offset = 0; var failures = 0; var total = 0; var issues = new HashSet<string>(); var complete = false; var verificationDetails = new Dictionary<string, HistoryVerificationDetails>(StringComparer.OrdinalIgnoreCase);
         while (true)
         {
             var page = await ReadPageAsync(owner, offset, ct); var before = rows.Count;
             foreach (var row in page.Rows) rows[row.Hash] = row; failures += page.Failed; total = Math.Max(total, page.Total);
             foreach (var issue in page.Issues ?? []) issues.Add(issue);
-            var snapshot = new HistoryPage(rows.Values.OrderByDescending(r => r.Block).ThenByDescending(r => r.Timestamp).ToArray(), page.NextOffset, failures, page.MayHaveMore, total, false, issues.ToArray()); progress?.Report(snapshot);
+            foreach (var detail in page.VerificationDetails) verificationDetails[detail.Hash] = detail;
+            var snapshot = new HistoryPage(rows.Values.OrderByDescending(r => r.Block).ThenByDescending(r => r.Timestamp).ToArray(), page.NextOffset, failures, page.MayHaveMore, total, false, issues.ToArray()) { VerificationDetails = verificationDetails.Values.ToArray() }; progress?.Report(snapshot);
             if (!page.MayHaveMore) { complete = page.NextOffset >= total; offset = page.NextOffset; break; }
             if (page.NextOffset <= offset || before == rows.Count || page.NextOffset > 1_000_000) { issues.Add("Индексатор не продвигает курсор. История загружена не полностью."); break; }
             offset = page.NextOffset;
@@ -92,7 +108,7 @@ public sealed partial class HistoryReader(DecimalClient client, bool archiveFall
         {
             complete = false; issues.Add("Официальный каталог testnet отстает от сети: новые операции могут отсутствовать. Дополните историю проверкой локального журнала или известного хэша.");
         }
-        return new(rows.Values.OrderByDescending(r => r.Block).ThenByDescending(r => r.Timestamp).ToArray(), offset, failures, !complete, total, complete, issues.ToArray());
+        return new(rows.Values.OrderByDescending(r => r.Block).ThenByDescending(r => r.Timestamp).ToArray(), offset, failures, !complete, total, complete, issues.ToArray()) { VerificationDetails = verificationDetails.Values.ToArray() };
     }
     private static HistoryRow ParseLegacy(JsonElement row)
     {
@@ -121,34 +137,45 @@ public sealed partial class HistoryReader(DecimalClient client, bool archiveFall
         if (movements.Count == 0 && value > 0) movements.Add(new("", "DEL", 18, value, from, to, "indexer"));
         return new(hash, U(S(row, "block")), DateTimeOffset.Parse(S(row, "timestamp"), CultureInfo.InvariantCulture), from, to, value, U(S(P(row, "fee"), "gas_amount", "0")), S(row, "status").Equals("Success", StringComparison.OrdinalIgnoreCase), Clean(S(row, "method", "Операция архива")), movements, Verification: "indexer-evm");
     }
-    public async Task<HistoryRow?> VerifyAsync(string hash, string owner, CancellationToken ct = default, bool allowIndexerLink = false)
+    public Task<HistoryRow?> VerifyAsync(string hash, string owner, CancellationToken ct = default, bool allowIndexerLink = false)
+        => VerifyCoreAsync(hash, owner, ct, allowIndexerLink, null);
+    private async Task<HistoryRow?> VerifyCoreAsync(string hash, string owner, CancellationToken ct, bool allowIndexerLink, Action<HistoryVerificationAttempt>? observe)
     {
         var canArchive = archiveFallback && client.Network.ChainId == 75 && (archiveReaderFactory is not null || client.Network.RpcUrl.Host.EndsWith(".decimalchain.com", StringComparison.OrdinalIgnoreCase));
-        async Task<HistoryRow?> Primary() => await VerifyPrimaryAsync(hash, owner, ct, allowIndexerLink);
-        async Task<HistoryRow?> Archived() => await (await ArchiveAsync(ct)).VerifyPrimaryAsync(hash, owner, ct, allowIndexerLink);
-        if (!canArchive) return await Primary();
+        async Task<HistoryRow?> Primary() => await VerifyPrimaryAsync(hash, owner, ct, allowIndexerLink, code => observe?.Invoke(new("primary", code)));
+        async Task<HistoryRow?> Archived() => await (await ArchiveAsync(ct)).VerifyPrimaryAsync(hash, owner, ct, allowIndexerLink, code => observe?.Invoke(new("archive", code)));
+        if (!canArchive)
+        {
+            var primary = await Primary(); if (primary is not null) observe?.Invoke(new("primary", "verified")); return primary;
+        }
         // An archive can lag recent blocks. A previous success must never disable the primary RPC.
         foreach (var isArchive in preferArchive ? new[] { true, false } : new[] { false, true })
         {
             try
             {
                 var row = isArchive ? await Archived() : await Primary();
-                if (row is not null) { preferArchive = isArchive; return row; }
+                if (row is not null) { observe?.Invoke(new(isArchive ? "archive" : "primary", "verified")); preferArchive = isArchive; return row; }
             }
-            catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { }
+            catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { observe?.Invoke(new(isArchive ? "archive" : "primary", VerificationErrorCode(e))); }
         }
         return null;
     }
-    private async Task<HistoryRow?> VerifyPrimaryAsync(string hash, string owner, CancellationToken ct, bool allowIndexerLink)
+    private async Task<HistoryRow?> VerifyPrimaryAsync(string hash, string owner, CancellationToken ct, bool allowIndexerLink, Action<string>? rejected = null)
     {
         owner = Address(owner); if (!HashPattern().IsMatch(hash)) throw new ArgumentException("Неверный хэш.");
         if ((await client.Web3.Eth.ChainId.SendRequestAsync().WaitAsync(ct)).Value != client.Network.ChainId) throw new InvalidOperationException("RPC вернул другую сеть.");
         var txTask = client.Web3.Eth.Transactions.GetTransactionByHash.SendRequestAsync(hash); var receiptTask = client.Web3.Eth.Transactions.GetTransactionReceipt.SendRequestAsync(hash); await Task.WhenAll(txTask, receiptTask).WaitAsync(ct);
+        HistoryRow? Reject(string code) { rejected?.Invoke(code); return null; }
         var tx = txTask.Result; var receipt = receiptTask.Result;
-        if (tx is null || receipt?.BlockNumber is null || receipt.Status is null || tx.BlockHash != receipt.BlockHash || tx.BlockNumber?.Value != receipt.BlockNumber.Value || !hash.Equals(tx.TransactionHash, StringComparison.OrdinalIgnoreCase) || !hash.Equals(receipt.TransactionHash, StringComparison.OrdinalIgnoreCase)) return null;
-        if (receipt.Status.Value != 0 && receipt.Status.Value != 1 || !string.Equals(receipt.From, tx.From, StringComparison.OrdinalIgnoreCase) || !string.Equals(receipt.To, tx.To, StringComparison.OrdinalIgnoreCase)) return null;
+        if (tx is null && receipt is null) return Reject("transaction_and_receipt_missing");
+        if (tx is null) return Reject("transaction_missing");
+        if (receipt is null) return Reject("receipt_missing");
+        if (receipt.BlockNumber is null || receipt.Status is null) return Reject("receipt_incomplete");
+        if (tx.BlockHash != receipt.BlockHash || tx.BlockNumber?.Value != receipt.BlockNumber.Value || !hash.Equals(tx.TransactionHash, StringComparison.OrdinalIgnoreCase) || !hash.Equals(receipt.TransactionHash, StringComparison.OrdinalIgnoreCase)) return Reject("transaction_receipt_mismatch");
+        if (receipt.Status.Value != 0 && receipt.Status.Value != 1 || !string.Equals(receipt.From, tx.From, StringComparison.OrdinalIgnoreCase) || !string.Equals(receipt.To, tx.To, StringComparison.OrdinalIgnoreCase)) return Reject("receipt_identity_mismatch");
         var block = await client.Web3.Eth.Blocks.GetBlockWithTransactionsHashesByNumber.SendRequestAsync(receipt.BlockNumber).WaitAsync(ct);
-        if (block is null || block.BlockHash != receipt.BlockHash || block.Number.Value != receipt.BlockNumber.Value || block.Timestamp.Value < 0 || block.Timestamp.Value > DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 60) return null;
+        if (block is null) return Reject("block_missing");
+        if (block.BlockHash != receipt.BlockHash || block.Number.Value != receipt.BlockNumber.Value || block.Timestamp.Value < 0 || block.Timestamp.Value > DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 60) return Reject("block_mismatch");
         var direct = owner.Equals(tx.From, StringComparison.OrdinalIgnoreCase) || owner.Equals(tx.To, StringComparison.OrdinalIgnoreCase); var moves = new List<AssetMovement>();
         if (receipt.Status.Value == 1)
         {
@@ -178,7 +205,7 @@ public sealed partial class HistoryReader(DecimalClient client, bool archiveFall
                 catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { /* Unknown event data is never guessed as a transfer. */ }
             }
         }
-        if (!direct && moves.Count == 0 && !allowIndexerLink) return null;
+        if (!direct && moves.Count == 0 && !allowIndexerLink) return Reject("address_relation_unverified");
         var memo = "";
         if (tx.Input is { Length: > 2 and < 2050 } && (tx.To is null || !tx.Input.StartsWith("0xa9059cbb", StringComparison.OrdinalIgnoreCase)))
         {
@@ -218,9 +245,9 @@ public sealed partial class HistoryReader(DecimalClient client, bool archiveFall
     public static string Csv(IEnumerable<HistoryRow> rows)
     {
         static string Cell(string text) { if (text.Length > 0 && "=+-@\t\r\n".Contains(text[0])) text = "'" + text; return "\"" + text.Replace("\"", "\"\"") + "\""; }
-        var b = new StringBuilder("time,block,hash,status,kind,from,to,asset,contract,token_id,amount,amount_raw,fee_del,verification,inner_status\r\n");
+        var b = new StringBuilder("time,block,hash,status,kind,from,to,asset,contract,token_id,amount,amount_raw,fee_del,verification,inner_status,verification_reason\r\n");
         foreach (var row in rows) foreach (var move in row.Movements is { Count: > 0 } m ? m : new[] { new AssetMovement("", "DEL", 18, row.ValueWei, row.From, row.To ?? "", "native") })
-            b.AppendLine(string.Join(',', new[] { row.Timestamp.ToString("O"), row.Block.ToString(), row.Hash, row.Success ? "success" : "failed", row.Kind, move.From, move.To, move.Symbol, move.Contract, move.TokenId?.ToString() ?? "", move.Amount, move.Raw.ToString(), Units.Format(row.FeeWei), row.Verification, row.InnerSuccess is true ? "success" : row.InnerSuccess is false ? "failed" : "" }.Select(Cell)));
+            b.AppendLine(string.Join(',', new[] { row.Timestamp.ToString("O"), row.Block.ToString(), row.Hash, row.Success ? "success" : "failed", row.Kind, move.From, move.To, move.Symbol, move.Contract, move.TokenId?.ToString() ?? "", move.Amount, move.Raw.ToString(), Units.Format(row.FeeWei), row.Verification, row.InnerSuccess is true ? "success" : row.InnerSuccess is false ? "failed" : "", row.VerificationReason }.Select(Cell)));
         return b.ToString();
     }
 }
