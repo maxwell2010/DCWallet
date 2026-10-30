@@ -10,7 +10,10 @@ using Nethereum.RPC.Eth.DTOs;
 
 namespace DCWallet.Core;
 
-public sealed record DataSet<T>(IReadOnlyList<T> Items, BigInteger Block, bool Complete, IReadOnlyList<string> Issues);
+public sealed record DataSet<T>(IReadOnlyList<T> Items, BigInteger Block, bool Complete, IReadOnlyList<string> Issues)
+{
+    public IReadOnlyList<string> CoverageNotes { get; init; } = Array.Empty<string>();
+}
 public sealed record TokenBalance(string Contract, string Name, string Symbol, int Decimals, BigInteger Raw)
 {
     public string Amount => Units.Format(Raw, Decimals);
@@ -167,7 +170,7 @@ public sealed class WalletDataReader : IDisposable
     public sealed record NftHint(string Contract, BigInteger TokenId, string Standard, string Name);
     public async Task<DataSet<NftBalance>> NftsAsync(string ownerInput, CancellationToken ct = default)
     {
-        var owner = Address(ownerInput); var block = await Snapshot(ct); var hints = Cached<NftHint>("nfts", owner).DistinctBy(h => h.Contract + ":" + h.TokenId).ToDictionary(h => h.Contract + ":" + h.TokenId); var issues = new List<string>(); var complete = false;
+        var owner = Address(ownerInput); var block = await Snapshot(ct); var hints = Cached<NftHint>("nfts", owner).DistinctBy(h => h.Contract + ":" + h.TokenId).ToDictionary(h => h.Contract + ":" + h.TokenId); var issues = new List<string>(); var notes = new List<string>(); var complete = false;
         try
         {
             var meta = await GraphAsync("{_meta{block{number}}}", new { }, ct); var indexed = U(S(P(P(meta, "_meta"), "block"), "number")); var after = "";
@@ -196,11 +199,22 @@ public sealed class WalletDataReader : IDisposable
                 {
                     var root = await JsonAsync($"https://explorer.mintcandy.ru/mc-api/v1/nfts/addresses/{owner}/tokens?limit=100&offset={offset}&media=0" + (snapshot.Length > 0 ? "&snapshot=" + Uri.EscapeDataString(snapshot) : ""), ct: ct);
                     if (!B(root, "Ok")) throw new InvalidDataException(); var data = P(root, "Result"); Identity(root, owner, 75); Identity(data, owner, 75);
-                    if (B(data, "partial") || B(root, "partial") || P(data, "unsupported_scope").ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined))
+                    var coverage = P(data, "coverage");
+                    var unsupported = Rows(coverage, "unsupported_scope").Concat(Rows(data, "unsupported_scope")).Any();
+                    if (unsupported) notes.Add("Автоматический поиск охватывает NFT, известные каталогам Decimal.");
+                    if (B(data, "partial") || B(root, "partial"))
                     {
                         complete = false;
-                        if (!issues.Contains("Каталог сообщает о неполном охвате внешних NFT.")) issues.Add("Каталог сообщает о неполном охвате внешних NFT.");
+                        var reasons = Rows(coverage, "issues").Select(v => v.GetString() ?? "").ToArray();
+                        var indexed = S(coverage, "index_block"); var head = S(coverage, "verified_block");
+                        var normalLag = reasons.Length > 0 && reasons.All(v => v == "index_block_differs_from_head") &&
+                            BigInteger.TryParse(indexed, out var indexedBlock) && BigInteger.TryParse(head, out var verifiedBlock) &&
+                            indexedBlock <= verifiedBlock && verifiedBlock - indexedBlock <= 100;
+                        if (!normalLag && (reasons.Length > 0 || !unsupported))
+                            issues.Add("Каталог NFT пока не завершил обновление данных.");
+                        else if (!unsupported) notes.Add("Некоторые внешние NFT могут отсутствовать в автоматическом поиске.");
                     }
+                    if (unsupported) complete = false;
                     var rows = RequiredRows(data, "items");
                     foreach (var row in rows)
                     {
@@ -228,8 +242,8 @@ public sealed class WalletDataReader : IDisposable
             }
             catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { failed.Add(hint.Contract + ":" + hint.TokenId); }
         });
-        if (!complete) issues.Add("Охват внешних NFT-коллекций не гарантирован индексаторами."); if (!failed.IsEmpty) issues.Add("Не удалось проверить NFT: " + string.Join(", ", failed));
-        await CheckSnapshot(block, ct); return new(found.OrderBy(n => n.Collection).ThenBy(n => n.TokenId).ToArray(), block.Number.Value, complete && failed.IsEmpty, issues);
+        if (!complete && notes.Count == 0) notes.Add("Некоторые NFT могут отсутствовать в автоматическом поиске."); if (!failed.IsEmpty) issues.Add("Не удалось проверить NFT: " + string.Join(", ", failed));
+        await CheckSnapshot(block, ct); return new(found.OrderBy(n => n.Collection).ThenBy(n => n.TokenId).ToArray(), block.Number.Value, complete && failed.IsEmpty, issues) { CoverageNotes = notes.Distinct().ToArray() };
     }
     public sealed record StakeHint(string Id, string Kind, string Validator, string Token, BigInteger Hold, BigInteger TokenId, string ValidatorName, bool Nft = false, string? QueueContract = null);
     private static readonly object NftLocatorGate = new();
@@ -263,41 +277,47 @@ public sealed class WalletDataReader : IDisposable
     }
     public async Task<DataSet<WalletStake>> StakesAsync(string ownerInput, CancellationToken ct = default)
     {
-        var owner = Address(ownerInput); var block = await Snapshot(ct); var hints = Cached<StakeHint>("stakes", owner).DistinctBy(h => h.Kind + ":" + h.Id).ToDictionary(h => h.Kind + ":" + h.Id); var issues = new List<string>(); var complete = false;
+        var owner = Address(ownerInput); var block = await Snapshot(ct); var hints = Cached<StakeHint>("stakes", owner).DistinctBy(h => h.Kind + ":" + h.Id).ToDictionary(h => h.Kind + ":" + h.Id); var issues = new List<string>(); var sourceIssues = new List<string>(); var notes = new List<string>(); var complete = false; var consoleFresh = false; var queueFresh = false;
         if(client.Network.ChainId==202020)foreach(var hint in Cached<StakeHint>("nft-stake-locators",owner))hints[hint.Kind+":"+hint.Id]=hint;
         if (client.Network.ChainId == 75)
         {
             try
             {
                 var root = await JsonAsync($"https://console.mintcandy.ru/api/v1/wallets/{owner}/staking", ct: ct); Identity(root, owner, 75);
-                foreach (var row in Rows(root, "positions"))
+                foreach (var row in RequiredRows(root, "positions"))
                 {
                     if (B(row, "verificationError")) continue;
                     var validator = Address(S(row, "validator")); var token = Address(S(row, "contract")); var hold = U(S(row, "holdTimestamp", "0")); var nft = S(row, "nftId"); var id = validator + ":" + token + ":" + hold + ":" + nft;
                     hints["active:" + id] = new(id, "active", validator, token, hold, nft.Length > 0 ? U(nft) : 0, Clean(S(row, "validatorName")), nft.Length > 0);
                 }
-                foreach (var kind in new[] { ("withdrawals", "withdraw"), ("transfers", "transfer") }) foreach (var row in Rows(root, kind.Item1)) { var id = U(S(row, "id")).ToString(); hints[kind.Item2 + ":" + id] = new(id, kind.Item2, "", "", 0, 0, ""); }
-                complete = !B(root, "sourceStale") && !B(root, "requestsTruncated");
+                foreach (var kind in new[] { ("withdrawals", "withdraw"), ("transfers", "transfer") }) foreach (var row in RequiredRows(root, kind.Item1)) { var id = U(S(row, "id")).ToString(); hints[kind.Item2 + ":" + id] = new(id, kind.Item2, "", "", 0, 0, ""); }
+                consoleFresh = BigInteger.TryParse(S(root, "verifiedBlock"), out var consoleBlock) && BigInteger.Abs(consoleBlock - block.Number.Value) <= 100 && P(root, "sourceStale").ValueKind == JsonValueKind.False && P(root, "requestsTruncated").ValueKind == JsonValueKind.False && P(root, "error").ValueKind is JsonValueKind.Null or JsonValueKind.Undefined;
             }
-            catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { issues.Add("Каталог ставок консоли недоступен."); }
+            catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { sourceIssues.Add("Каталог ставок консоли недоступен."); }
             try
             {
                 var root = await JsonAsync($"https://explorer.mintcandy.ru/v1/wallets/{owner}/staking", ct: ct); Identity(root, owner, 75); var data = P(root, "Result");
-                if (!B(root, "Ok") || !B(data, "withdrawals_authoritative") || !B(data, "withdrawals_fresh")) throw new InvalidDataException();
-                foreach (var row in Rows(data, "withdrawals")) { var id = U(S(row, "id")).ToString(); hints["withdraw:" + id] = new(id, "withdraw", "", "", 0, 0, Clean(S(row, "validator_name"))); }
+                if (!B(root, "Ok")) throw new InvalidDataException();
+                Identity(data, owner, 75);
+                queueFresh = B(data, "withdrawals_authoritative") && B(data, "withdrawals_fresh") && BigInteger.TryParse(S(data, "withdrawals_checked_block"), out var queueBlock) && BigInteger.Abs(queueBlock - block.Number.Value) <= 100;
+                if (!queueFresh) notes.Add("Резервный каталог разморозки обновляется; используется свежий индекс Decimal.");
+                foreach (var row in RequiredRows(data, "withdrawals")) { var id = U(S(row, "id")).ToString(); hints["withdraw:" + id] = new(id, "withdraw", "", "", 0, 0, Clean(S(row, "validator_name"))); }
             }
-            catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { complete = false; issues.Add("Полнота очереди разморозки не подтверждена."); }
+            catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { sourceIssues.Add("Не удалось загрузить резервную очередь разморозки."); }
         }
+        complete = consoleFresh && queueFresh;
         // The Graph also supplies hold/NFT identities and supports the selected testnet.
         try
         {
+            var graphMeta = await GraphAsync("{_meta{block{number}}}", new { }, ct);
+            var indexed = U(S(P(P(graphMeta, "_meta"), "block"), "number"));
             foreach (var kind in new[] { ("stakes", "active"), ("withdrawStakes", "withdraw"), ("transferStakes", "transfer") })
             {
                 var after = "";
                 for (var pages = 0; pages < 1000; pages++)
                 {
-                    var query = "query Stakes($owner:Bytes!,$after:ID!){" + kind.Item1 + "(first:100,orderBy:id,orderDirection:asc,where:{delegator:$owner,id_gt:$after}){id delegator " + (kind.Item2 == "transfer" ? "oldValidator" : "validator") + "{address} token{address} nft{collection{address}} tokenId holdTimestamp}}";
-                    var data = await GraphAsync(query, new { owner, after }, ct); var rows = RequiredRows(data, kind.Item1);
+                    var query = "query Stakes($owner:Bytes!,$after:ID!,$block:Int!){" + kind.Item1 + "(first:100,orderBy:id,orderDirection:asc,where:{delegator:$owner,id_gt:$after},block:{number:$block}){id delegator " + (kind.Item2 == "transfer" ? "oldValidator" : "validator") + "{address} token{address} nft{collection{address}} tokenId holdTimestamp}}";
+                    var data = await GraphAsync(query, new { owner, after, block = (int)indexed }, ct); var rows = RequiredRows(data, kind.Item1);
                     foreach (var row in rows)
                     {
                         if (Address(S(row, "delegator")) != owner) throw new InvalidDataException("Чужой стейк.");
@@ -311,8 +331,9 @@ public sealed class WalletDataReader : IDisposable
                     if (rows.Length < 100) break; if (pages == 999) throw new InvalidDataException("Каталог стейкинга превысил предел обхода."); var next = S(rows[^1], "id"); if (string.CompareOrdinal(next, after) <= 0 || next.Length == 0) throw new InvalidDataException("Повтор страницы стейкинга."); after = next;
                 }
             }
+            complete |= indexed <= block.Number.Value && block.Number.Value - indexed <= 100;
         }
-        catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { complete = false; issues.Add("Индексатор стейкинга недоступен; используются резервные каталоги."); }
+        catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { sourceIssues.Add("Индексатор стейкинга недоступен; используются резервные каталоги."); }
         if(client.Network.ChainId==202020)
         {
             try
@@ -382,8 +403,9 @@ public sealed class WalletDataReader : IDisposable
             }
             catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { failures.Add(hint.Id); }
         });
-        if (!failures.IsEmpty) issues.Add("Не удалось проверить позиции: " + string.Join(", ", failures)); if (!complete) issues.Add("Полнота каталога стейкинга не подтверждена.");
-        await CheckSnapshot(block, ct); return new(verified.OrderBy(s => s.Kind).ThenBy(s => s.Symbol).ToArray(), block.Number.Value, complete && failures.IsEmpty, issues);
+        if (complete) notes.AddRange(sourceIssues); else { issues.AddRange(sourceIssues); issues.Add("Не удалось полностью обновить стейки. Повторите загрузку."); }
+        if (!failures.IsEmpty) issues.Add("Не удалось проверить позиции: " + string.Join(", ", failures));
+        await CheckSnapshot(block, ct); return new(verified.OrderBy(s => s.Kind).ThenBy(s => s.Symbol).ToArray(), block.Number.Value, complete && failures.IsEmpty, issues) { CoverageNotes = notes.Distinct().ToArray() };
     }
 }
 

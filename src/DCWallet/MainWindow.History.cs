@@ -19,7 +19,7 @@ public sealed partial class MainWindow
     private void ShowHistory()
     {
         if (!RequireWallet()) return;
-        Reset("История", "Архив загружается постранично до конца. Квитанции, комиссии и движения активов сверяются через RPC."); SelectNav("История"); SetPageWidth(800);
+        Reset("История", "Переводы и операции вашего кошелька."); SelectNav("История"); SetPageWidth(800);
         var key = network.ChainId + ":" + Address.ToLowerInvariant(); if (historyOwner != key) { historyData = null; historyOwner = key; manuallyVerifiedHistory.Clear(); }
         var summary = Text("История еще не загружена.", 13, Muted); page.Children.Add(summary);
         var search = Field("Поиск по хэшу, адресу, токену или операции"); search.Watermark = "Начните вводить...";
@@ -28,13 +28,16 @@ public sealed partial class MainWindow
         {
             list.Children.Clear();
             if (historyData is null) { summary.Text = historyLoading ? "Загружаем историю..." : "История еще не загружена."; return; }
-            summary.Text = $"Загружено {historyData.Rows.Count} из {historyData.Total}. Ошибок проверки: {historyData.Failed}. " + (historyLoading ? "Загрузка продолжается..." : historyData.Complete ? "Все страницы каталога обработаны." : "Загрузка неполная.");
-            foreach (var issue in historyData.Issues ?? []) list.Children.Add(Text(issue, 12, UiPalette.Error));
+            summary.Text = historyLoading ? $"Загружено операций: {historyData.Rows.Count}. Загрузка продолжается..." : $"Операций: {historyData.Rows.Count}";
+            ToolTip.SetTip(summary, $"Записей в каталоге: {historyData.Total}. Требуют дополнительной проверки: {historyData.Failed}. " + (historyData.Complete ? "Загрузка завершена." : "История может дополняться при обновлении."));
             var query = search.Text?.Trim() ?? "";
             var filtered = historyData.Rows.Where(r => query.Length == 0 || (r.Hash + " " + r.From + " " + r.To + " " + r.Kind + " " + string.Join(' ', r.Movements?.Select(m => m.Symbol) ?? [])).Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray();
             foreach (var row in filtered.Take(limit))
             {
-                var content = new StackPanel { Spacing = 7 }; content.Children.Add(Text(row.Kind + " · " + HistorySafeOutcome.DisplayStatus(row) + (row.Verification.StartsWith("indexer") ? " (индексатор)" : ""), 16)); content.Children.Add(Text($"{row.Timestamp.LocalDateTime:g} · Блок {row.Block}", 12, Muted));
+                var content = new StackPanel { Spacing = 7 };
+                var rowTitle = Text(row.Kind + " · " + (row.Verification.StartsWith("indexer", StringComparison.Ordinal) ? "Данные архива" : HistorySafeOutcome.DisplayStatus(row)), 16);
+                if (row.Verification != "rpc") ToolTip.SetTip(rowTitle, row.Verification.StartsWith("indexer", StringComparison.Ordinal) ? "Сведения из архива Decimal. Подтверждение через RPC пока недоступно." : "Квитанция подтверждена. Связь с кошельком указана архивом.");
+                content.Children.Add(rowTitle); content.Children.Add(Text($"{row.Timestamp.LocalDateTime:g} · Блок {row.Block}", 12, Muted));
                 foreach (var move in row.Movements ?? [])
                 {
                     var direction = move.To.Equals(Address, StringComparison.OrdinalIgnoreCase) && !move.From.Equals(Address, StringComparison.OrdinalIgnoreCase) ? "+" : move.From.Equals(Address, StringComparison.OrdinalIgnoreCase) && !move.To.Equals(Address, StringComparison.OrdinalIgnoreCase) ? "-" : "";
@@ -42,7 +45,7 @@ public sealed partial class MainWindow
                 }
                 content.Children.Add(Text("От: " + row.From + "\nКому: " + row.To + "\nКомиссия отправителя: " + Units.Format(row.FeeWei) + " DEL", 12, Muted));
                 if (row.Memo.Length > 0) content.Children.Add(Text("Сообщение: " + row.Memo, 13));
-                if (row.Verification != "rpc") content.Children.Add(Text(row.Verification.StartsWith("indexer") ? "Архив индексатора. Текущий RPC не подтвердил старую квитанцию; суммы и статус не считаются RPC-проверенными." : "Квитанция проверена RPC. Связь с адресом указана индексатором; движение не расшифровано.", 12, UiPalette.Error));
+
                 var hash = MakeButton(row.Hash.Length > 25 ? row.Hash[..18] + "..." + row.Hash[^8..] : row.Hash, () => { OpenUrl("https://explorer.mintcandy.ru/#tx/" + row.Hash); return Task.CompletedTask; }); content.Children.Add(hash); list.Children.Add(Card(content, 14));
             }
             if (filtered.Length > limit) list.Children.Add(MakeButton("Показать следующие 50", () => { limit += 50; Render(); return Task.CompletedTask; }));

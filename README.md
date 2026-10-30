@@ -4,7 +4,7 @@
 
 [![Native checks](https://github.com/maxwell2010/DCWallet/actions/workflows/check.yml/badge.svg)](https://github.com/maxwell2010/DCWallet/actions/workflows/check.yml)
 
-Нативные сборки и результаты проверок: [GitHub Actions](https://github.com/maxwell2010/DCWallet/actions/workflows/check.yml). Обновление 0.2.1 добавляет совместимость с новым ABI стейкинга Decimal; публикация допускается после успешного нативного прогона. Мост исключен; mainnet NFT-делегирование сохраняет проверку паузы контракта.
+Нативные сборки и результаты проверок: [GitHub Actions](https://github.com/maxwell2010/DCWallet/actions/workflows/check.yml). Обновление 0.2.2 упрощает навигацию и исправляет загрузку источников и архивных квитанций; публикация допускается после успешного нативного прогона. Мост исключен; mainnet NFT-делегирование сохраняет проверку паузы контракта.
 
 Отдельный [сетевой прогон 0.2.1](docs/NETWORK-VALIDATION-0.2.1.md): 18 применимых opt-in тестов прошли, 22 новые testnet-транзакции подтверждены, pending 0. Мост и mainnet NFT-стейкинг исключены.
 
@@ -46,7 +46,7 @@ DC WALLET предназначен для обычных сценариев desk
 ```powershell
 dotnet run --project src/DCWallet
 dotnet test DCWallet.sln -c Release
-./tools/publish.ps1 -Runtime win-x64 -Version 0.2.1
+./tools/publish.ps1 -Runtime win-x64 -Version 0.2.2
 ```
 
 Проверьте `dotnet --info`: для сборки нужен .NET SDK8. Готовые self-contained файлы не требуют установки SDK.

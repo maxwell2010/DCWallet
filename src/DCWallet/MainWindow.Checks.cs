@@ -15,7 +15,7 @@ public sealed partial class MainWindow
         if(!RequireWallet())return;
         Reset("Чеки", "Создайте зашифрованный файл чека и передайте его получателю. Пароль чека передайте отдельно. Для погашения получателю нужен DEL на комиссию.");
         SelectNav("Чеки");
-        Back(()=>ShowOperations());
+        Back(ShowSend);
         var contract=Field("Контракт Checks",network.ChainId==202020?ChecksDeploymentProfile.TestnetContract:network.ChainId==75?ChecksDeploymentProfile.MainnetContract:"");
         var asset=new ComboBox{ItemsSource=new[]{"DEL","ERC20","ERC20 с permit"},SelectedIndex=0};page.Children.Add(asset);
         var token=Field("Контракт ERC20 (только для токенового чека)");var tokenPicker=AttachTokenPicker(token);page.Children.Add(tokenPicker);

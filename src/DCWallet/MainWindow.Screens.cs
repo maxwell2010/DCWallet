@@ -53,7 +53,7 @@ public sealed partial class MainWindow
         if (!RequireWallet()) return;
         SelectNav("Отправить"); Reset("Отправить", ""); SetPageWidth(640);
         if (signer is null) { page.Children.Add(Card(Text("Этот счет открыт только для просмотра. Для перевода откройте кошелек с ключом."))); return; }
-        var segments = Segments(("Одному получателю", ShowSend), ("Нескольким сразу", ShowMultisend), ("Чеком", () => ShowOperations("Checks"))); ((Button)segments.Children[0]).Background = UiPalette.Card;
+        var segments = Segments(("Одному получателю", ShowSend), ("Нескольким сразу", ShowMultisend), ("Сжигание", ShowBurn)); ((Button)segments.Children[0]).Background = UiPalette.Card;
         BeginCard(); var recipient = Field("Получатель"); recipient.Watermark = "0x...";
         if (preferences.Contacts.Count > 0)
         {

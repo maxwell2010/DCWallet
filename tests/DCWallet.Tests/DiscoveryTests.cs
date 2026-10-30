@@ -38,7 +38,7 @@ public sealed class DiscoveryTests
     public async Task NftOwnershipIsVerifiedAndPartialCoveragePreserved()
     {
         using var rpc = new DiscoveryRpc(); using var reader = Reader(rpc,new DiscoveryCatalogHandler { Partial = true });
-        var result = await reader.NftsAsync(Owner); Assert.Empty(result.Items); Assert.False(result.Complete); Assert.Contains(result.Issues,x=>x.Contains("неполном"));
+        var result = await reader.NftsAsync(Owner); Assert.Empty(result.Items); Assert.False(result.Complete); Assert.Contains(result.Issues,x=>x.Contains("не завершил"));
     }
     [Fact]
     public async Task NftVerifiedOwnerIsIncluded()
@@ -96,6 +96,41 @@ public sealed class DiscoveryTests
         using var ct = new CancellationTokenSource(); var read = reader.TokensAsync(Owner,ct.Token);
         await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(2)); ct.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>read);
+    }
+    [Fact]
+    public async Task NormalNftIndexLagAndScopeAreNotesRatherThanOfflineErrors()
+    {
+        using var rpc = new DiscoveryRpc(); using var reader = Reader(rpc,new DiscoveryCatalogHandler { NormalNftCoverage = true });
+        var result = await reader.NftsAsync(Owner);
+        Assert.False(result.Complete); Assert.Empty(result.Issues); Assert.NotEmpty(result.CoverageNotes); Assert.Equal(0,rpc.Broadcasts);
+    }
+    [Fact]
+    public async Task FreshCompleteGraphReplacesStaleOptionalQueue()
+    {
+        using var rpc = new DiscoveryRpc(); using var reader = Reader(rpc,new DiscoveryCatalogHandler { StaleQueue = true });
+        var result = await reader.StakesAsync(Owner);
+        Assert.True(result.Complete); Assert.Empty(result.Issues); Assert.NotEmpty(result.CoverageNotes); Assert.Equal(0,rpc.Broadcasts);
+    }
+    [Fact]
+    public async Task StaleQueueWithoutGraphNeverClaimsCompleteEmptyStaking()
+    {
+        using var rpc = new DiscoveryRpc(); using var reader = Reader(rpc,new DiscoveryCatalogHandler { StaleQueue = true, GraphUnavailable = true });
+        var result = await reader.StakesAsync(Owner);
+        Assert.False(result.Complete); Assert.NotEmpty(result.Issues); Assert.Equal(0,rpc.Broadcasts);
+    }
+    [Fact]
+    public async Task LargeNftIndexLagRemainsAnActualDataIssue()
+    {
+        using var rpc = new DiscoveryRpc(); using var reader = Reader(rpc,new DiscoveryCatalogHandler { NormalNftCoverage = true, NftVerifiedBlock = 1000 });
+        var result = await reader.NftsAsync(Owner);
+        Assert.False(result.Complete); Assert.NotEmpty(result.Issues);
+    }
+    [Fact]
+    public async Task OldGraphAndQueueCannotClaimFreshStaking()
+    {
+        using var rpc = new DiscoveryRpc { BlockNumberHex = "0x1000" }; using var reader = Reader(rpc,new DiscoveryCatalogHandler { StaleQueue = true });
+        var result = await reader.StakesAsync(Owner);
+        Assert.False(result.Complete); Assert.NotEmpty(result.Issues);
     }
     sealed class TimedOutCatalog:HttpMessageHandler
     {

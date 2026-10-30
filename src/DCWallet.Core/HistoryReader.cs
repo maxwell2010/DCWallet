@@ -17,15 +17,25 @@ public sealed record AssetMovement(string Contract, string Symbol, int? Decimals
 }
 public sealed record HistoryRow(string Hash, BigInteger Block, DateTimeOffset Timestamp, string From, string? To, BigInteger ValueWei, BigInteger FeeWei, bool Success, string Kind, IReadOnlyList<AssetMovement>? Movements = null, string Memo = "", string Verification = "rpc", bool? InnerSuccess = null);
 public sealed record HistoryPage(IReadOnlyList<HistoryRow> Rows, int NextOffset, int Failed, bool MayHaveMore, int Total = 0, bool Complete = false, IReadOnlyList<string>? Issues = null);
-public sealed partial class HistoryReader(DecimalClient client, bool archiveFallback = true)
+public sealed partial class HistoryReader(DecimalClient client, bool archiveFallback = true, Func<Task<HistoryReader>>? archiveReaderFactory = null)
 {
-    private bool preferArchive;
-    private readonly Lazy<Task<HistoryReader>> archive = new(async () =>
+    private volatile bool preferArchive;
+    private volatile HistoryReader? archiveReader;
+    private readonly SemaphoreSlim archiveGate = new(1, 1);
+    private async Task<HistoryReader> ArchiveAsync(CancellationToken ct)
     {
-        var archiveClient = new DecimalClient(client.Network with { RpcUrl = new Uri("https://node4-mainnet.decimalchain.com/web3/") });
-        if ((await archiveClient.Web3.Eth.ChainId.SendRequestAsync()).Value != client.Network.ChainId) throw new InvalidOperationException("Архивный RPC вернул другую сеть.");
-        return new HistoryReader(archiveClient, false);
-    });
+        if (archiveReader is not null) return archiveReader;
+        await archiveGate.WaitAsync(ct);
+        try
+        {
+            if (archiveReader is not null) return archiveReader;
+            if (archiveReaderFactory is not null) return archiveReader = await archiveReaderFactory().WaitAsync(ct);
+            var archiveClient = new DecimalClient(client.Network with { RpcUrl = new Uri("https://node4-mainnet.decimalchain.com/web3/") });
+            if ((await archiveClient.Web3.Eth.ChainId.SendRequestAsync().WaitAsync(ct)).Value != client.Network.ChainId) throw new InvalidOperationException("Архивный RPC вернул другую сеть.");
+            return archiveReader = new HistoryReader(archiveClient, false);
+        }
+        finally { archiveGate.Release(); }
+    }
     private static readonly string Transfer = Topic("Transfer(address,address,uint256)"), Single = Topic("TransferSingle(address,address,address,uint256,uint256)"), Batch = Topic("TransferBatch(address,address,address,uint256[],uint256[])");
     private readonly ConcurrentDictionary<string, Task<(string, int?)>> metadata = new();
     [GeneratedRegex("^0x[0-9a-fA-F]{64}$")] private static partial Regex HashPattern();
@@ -44,7 +54,7 @@ public sealed partial class HistoryReader(DecimalClient client, bool archiveFall
         var count = U(S(result, "count", (offset + candidates.Length).ToString()));
         if (count > 1_000_000) throw new InvalidDataException("Слишком большой каталог истории.");
         var total = (int)count; var rows = new ConcurrentBag<HistoryRow>(); var failed = 0;
-        await Parallel.ForEachAsync(candidates, new ParallelOptions { MaxDegreeOfParallelism = 6, CancellationToken = ct }, async (candidate, token) =>
+        await Parallel.ForEachAsync(candidates, new ParallelOptions { MaxDegreeOfParallelism = 3, CancellationToken = ct }, async (candidate, token) =>
         {
             try
             {
@@ -113,14 +123,21 @@ public sealed partial class HistoryReader(DecimalClient client, bool archiveFall
     }
     public async Task<HistoryRow?> VerifyAsync(string hash, string owner, CancellationToken ct = default, bool allowIndexerLink = false)
     {
-        var canArchive = archiveFallback && client.Network.ChainId == 75 && client.Network.RpcUrl.Host.EndsWith(".decimalchain.com", StringComparison.OrdinalIgnoreCase);
-        if (!preferArchive || !canArchive)
+        var canArchive = archiveFallback && client.Network.ChainId == 75 && (archiveReaderFactory is not null || client.Network.RpcUrl.Host.EndsWith(".decimalchain.com", StringComparison.OrdinalIgnoreCase));
+        async Task<HistoryRow?> Primary() => await VerifyPrimaryAsync(hash, owner, ct, allowIndexerLink);
+        async Task<HistoryRow?> Archived() => await (await ArchiveAsync(ct)).VerifyPrimaryAsync(hash, owner, ct, allowIndexerLink);
+        if (!canArchive) return await Primary();
+        // An archive can lag recent blocks. A previous success must never disable the primary RPC.
+        foreach (var isArchive in preferArchive ? new[] { true, false } : new[] { false, true })
         {
-            try { var result = await VerifyPrimaryAsync(hash, owner, ct, allowIndexerLink); if (result is not null) return result; }
-            catch (Exception e) when (canArchive && (e is not OperationCanceledException || !ct.IsCancellationRequested)) { }
+            try
+            {
+                var row = isArchive ? await Archived() : await Primary();
+                if (row is not null) { preferArchive = isArchive; return row; }
+            }
+            catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { }
         }
-        if (!canArchive) return null;
-        var reader = await archive.Value.WaitAsync(ct); var archived = await reader.VerifyPrimaryAsync(hash, owner, ct, allowIndexerLink); if (archived is not null) preferArchive = true; return archived;
+        return null;
     }
     private async Task<HistoryRow?> VerifyPrimaryAsync(string hash, string owner, CancellationToken ct, bool allowIndexerLink)
     {

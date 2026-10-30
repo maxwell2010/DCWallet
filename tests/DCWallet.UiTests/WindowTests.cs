@@ -125,7 +125,7 @@ public sealed class WindowTests
                 var window = new MainWindow(dir, DecimalNetwork.Custom("fixture", 75, rpc.Url), autoLoad: false); window.Show(); Save(window, theme + "-unlock.png");
                 window.GetLogicalDescendants().OfType<TextBox>().Single().Text = "temporary-test-password"; Click(window, "Открыть кошелек"); await WaitFor(window, "Баланс еще не загружен");
                 Save(window, theme + "-overview.png");
-                foreach (var route in new[] { "Отправить", "Обмен", "Стейкинг", "Токены", "Счета", "Настройки", "История", "Инструменты" })
+                foreach (var route in new[] { "Отправить", "Обмен", "Стейкинг", "Токены", "Счета", "Настройки", "История", "Мост" })
                 {
                     Click(window, route); Save(window, theme + "-" + route + ".png");
                     Assert.True(window.GetLogicalDescendants().OfType<Button>().First(b => b.Content is StackPanel p && p.Children.OfType<TextBlock>().Any(t => t.Text == "Настройки")).Bounds.Height > 0);
@@ -222,8 +222,8 @@ public sealed class WindowTests
             Assert.Contains(window.GetLogicalDescendants().OfType<TextBlock>(), t => t.Text == "Баланс еще не загружен");
             Save(window, "assets.png"); Click(window, "Отправить"); Save(window, "send.png");
             Click(window, "Обзор"); Click(window, "Получить"); Assert.Contains(window.GetLogicalDescendants().OfType<Image>(), i => i.Width == 240); Save(window, "receive.png");
-            Click(window, "Инструменты");
-            Assert.True(window.GetLogicalDescendants().OfType<ComboBox>().First().Items.Count >= 10); Save(window, "operations.png");
+            Click(window, "Мост");
+            Assert.Contains(window.GetLogicalDescendants().OfType<TextBlock>(), t => t.Text == "Межсетевые переводы временно недоступны."); Save(window, "bridge.png");
             Click(window, "Заблокировать");
             Assert.Contains(window.GetLogicalDescendants().OfType<TextBlock>(), t => t.Text == "Кошелек заблокирован");
             Assert.DoesNotContain(window.GetLogicalDescendants().OfType<TextBox>(), t => t.Text == "temporary-test-password"); window.Close();

@@ -148,7 +148,8 @@ public sealed partial class MainWindow
     }
     private void UpdateAccountLabel()
     {
-        account.Text = Address.Length >= 12 ? Address[..8] + "..." + Address[^6..] + (signer is null ? " · просмотр" : privateKeyProfile?" · ключ":" · фраза") : "Кошелек заблокирован";
+        account.Text = Address.Length >= 12 ? Address[..8] + "..." + Address[^6..] : "Кошелек заблокирован";
+        ToolTip.SetTip(account, Address + "\nНажмите, чтобы скопировать адрес");
         var selector = shell.GetLogicalDescendants().OfType<ComboBox>().FirstOrDefault(c => c.Name == "AccountSelector");
         if (selector is not null) { var derived = signer is not null && !privateKeyProfile; selector.IsEnabled=derived; selector.ItemsSource = Enumerable.Range(1, derived?10:1).Select(i => i == 1 ? preferences.AccountName : "Счет " + i).ToArray(); selector.SelectedIndex = derived ? accountIndex : 0; }
     }

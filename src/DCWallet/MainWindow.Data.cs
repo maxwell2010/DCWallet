@@ -89,7 +89,7 @@ public sealed partial class MainWindow
     {
         if (dataLoading) target.Children.Add(Text("Загружаем токены, NFT и стейки...", 12, Muted));
         var issues = dataErrors.Concat(tokenData?.Issues ?? []).Concat(nftData?.Issues ?? []).Concat(stakeData?.Issues ?? []).Distinct().ToArray();
-        if (issues.Length > 0) target.Children.Add(new Expander { Header = "Часть источников недоступна или охват неполный", Content = Text(string.Join("\n", issues), 12, UiPalette.Error), HorizontalAlignment = HorizontalAlignment.Stretch });
+        if (issues.Length > 0) target.Children.Add(new Expander { Header = "Не удалось обновить некоторые данные", Content = Text(string.Join("\n", issues), 12, UiPalette.Error), HorizontalAlignment = HorizontalAlignment.Stretch });
         Button("Обновить все активы", async () => { await ReadWalletDataAsync(); dataChanged?.Invoke(); });
     }
     private Action DynamicData(Action render)
@@ -125,7 +125,7 @@ public sealed partial class MainWindow
             {
                 var query = search.Text?.Trim() ?? ""; var filtered = nftData.Items.Where(n => query.Length == 0 || (n.Collection + " " + n.Contract + " " + n.TokenId).Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray();
                 target.Children.Add(Text($"Найдено: {filtered.Length}. Всего NFT-позиций: {nftData.Items.Count}.", 13, Muted));
-                if (nftData.Items.Count == 0) target.Children.Add(Text(nftData.Complete ? "NFT не найдены." : "В доступных каталогах NFT не найдены. Внешние коллекции могут отсутствовать в индексе.", 13, Muted));
+                if (nftData.Items.Count == 0) target.Children.Add(Text("NFT пока не найдены.", 13, Muted));
                 foreach (var nft in filtered.Take(limit))
                 {
                     var content = new StackPanel { Spacing = 10 }; content.Children.Add(Text(nft.Collection + " · #" + nft.TokenId, 20)); content.Children.Add(Text($"{nft.Standard} · Количество: {nft.Raw}\n{nft.Contract}", 13, Muted));

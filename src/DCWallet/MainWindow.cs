@@ -94,20 +94,21 @@ public sealed partial class MainWindow : Window
     private void ShowOperations(string? family = null)
     {
         if (family == "Multisig") { ShowSafe(); return; }
+        if (family == "Checks") { ShowChecks(); return; }
+        if (family == "Bridge") { ShowBridge(); return; }
+        if (family is null) { ShowSend(); return; }
         if (!RequireWallet()) return;
-        Reset("Инструменты", "Выберите действие и заполните форму. Перед отправкой кошелек покажет параметры и комиссию.");
-        var common = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        common.Children.Add(MakeButton("Обычный перевод", () => { ShowSend(); return Task.CompletedTask; }));
-        common.Children.Add(MakeButton("Рассылка", () => { ShowMultisend(); return Task.CompletedTask; }));
-        common.Children.Add(MakeButton("Чеки", () => { ShowChecks(); return Task.CompletedTask; }));
-        common.Children.Add(MakeButton("Общий счет Safe", () => { ShowSafe(); return Task.CompletedTask; })); page.Children.Add(common);
-        if (family == "Multisig") Button("Общий счет Safe: предложение и подписи", () => { ShowSafe(); return Task.CompletedTask; }, true);
+        var section = OperationPresentation.Groups.FirstOrDefault(g => g.Code == family) ?? throw new ArgumentException("Неизвестный раздел операций.");
+        Reset(section.Title, "Выберите действие. Перед подтверждением будут показаны параметры и комиссия.");
+        Action returnTo = family switch { "Tokens" or "TokenCreation" => ShowTokens, "Nft" => ShowNfts, "TokenEconomy" => ShowSwap, "Staking" or "Validators" => ShowStaking, _ => ShowSend };
+        Back(returnTo);
+        SelectNav(family switch { "Tokens" or "TokenCreation" => "Токены", "Nft" => "NFT", "TokenEconomy" => "Обмен", "Staking" or "Validators" => "Стейкинг", _ => "Отправить" });
         var refreshRegistry = MakeButton("Обновить адреса контрактов из реестра сети", async () =>
         {
             network = await client.ResolveSystemContractsAsync(); client = new(network); session.Clear(); session = new(client, JournalDirectory);
-            ShowOperations(); status.Text = "Адреса delegation, token-center, nft-center и wdel прочитаны из Contract Center выбранной сети.";
+            ShowOperations(family); status.Text = "Адреса delegation, token-center, nft-center и wdel прочитаны из Contract Center выбранной сети.";
         });
-        var group = new ComboBox { ItemsSource = OperationPresentation.Groups.Where(g => g.Code != "Multisig").ToArray(), HorizontalAlignment = HorizontalAlignment.Stretch };
+        var group = new ComboBox { ItemsSource = OperationPresentation.Groups.Where(g => g.Code == family).ToArray(), HorizontalAlignment = HorizontalAlignment.Stretch, IsVisible = false };
         var operation = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, MaxDropDownHeight = 350 }; page.Children.Add(group); page.Children.Add(operation);
         ToolTip.SetTip(group, "Раздел операций: переводы, токены, NFT, стейкинг и другие действия сети.");
         ToolTip.SetTip(operation, "Выберите конкретное действие. Описание ниже объясняет его результат.");

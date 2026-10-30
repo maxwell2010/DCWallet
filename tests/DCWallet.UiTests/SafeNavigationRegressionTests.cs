@@ -21,7 +21,7 @@ public sealed class SafeNavigationRegressionTests
     {
         await InWallet(async window=>
         {
-            Click(window,"Инструменты");await Task.Delay(30);
+            typeof(MainWindow).GetMethod("ShowOperations",BindingFlags.NonPublic|BindingFlags.Instance)!.Invoke(window,["TokenEconomy"]);await Task.Delay(30);
             var groups=window.GetLogicalDescendants().OfType<ComboBox>().Single(c=>c.ItemsSource is IEnumerable<OperationGroup>);
             var choices=((IEnumerable<OperationGroup>)groups.ItemsSource!).ToArray();
             Assert.DoesNotContain(choices,g=>g.Code=="Multisig");
@@ -32,7 +32,7 @@ public sealed class SafeNavigationRegressionTests
                 var methods=window.GetLogicalDescendants().OfType<ComboBox>().Single(c=>c.ItemsSource is IEnumerable<Operation>);
                 Assert.DoesNotContain((IEnumerable<Operation>)methods.ItemsSource!,o=>o.Group=="Multisig");
             }
-            Click(window,"Общий счет Safe");await Task.Delay(30);AssertSafeWorkspace(window);
+            Click(window,"Общий счет");await Task.Delay(30);AssertSafeWorkspace(window);
         });
     }
     [AvaloniaFact]
