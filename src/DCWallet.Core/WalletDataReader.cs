@@ -19,6 +19,7 @@ public sealed record TokenBalance(string Contract, string Name, string Symbol, i
 public sealed record NftBalance(string Contract, BigInteger TokenId, string Standard, string Collection, BigInteger Raw, string Uri);
 public sealed record WalletStake(string Id, string Kind, string Validator, string ValidatorName, string Token, string Symbol, int? Decimals, BigInteger Raw, BigInteger TokenId, byte TokenType, BigInteger Hold, BigInteger Unfreeze, byte Status)
 {
+    public BigInteger? HoldStartTime { get; init; }
     public string Amount => Decimals is { } d ? Units.Format(Raw, d) : Raw + " (минимальные единицы)";
     public bool CanComplete => Kind != "active" && Status == 1 && Unfreeze > 0 && Unfreeze <= DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 }
@@ -353,14 +354,14 @@ public sealed class WalletDataReader : IDisposable
                     {
                         NftDelegationSupport.RequireSupported(client.Network.ChainId, contract);
                         var output = hint.Hold > 0
-                            ? await client.Web3.Eth.GetContractQueryHandler<GetNftHoldStake>().QueryDeserializingToObjectAsync<GetStakeOutput>(new() { Validator = hint.Validator, Delegator = owner, Collection = hint.Token, TokenId = hint.TokenId, Hold = hint.Hold }, contract, at).WaitAsync(token)
-                            : await client.Web3.Eth.GetContractQueryHandler<GetNftStake>().QueryDeserializingToObjectAsync<GetStakeOutput>(new() { Validator = hint.Validator, Delegator = owner, Collection = hint.Token, TokenId = hint.TokenId }, contract, at).WaitAsync(token);
-                        state = DelegationStake.FromContract(output.Stake);
+                            ? await StakeResponseDecoder.QueryAsync(client.Web3, contract, new GetNftHoldStake() { Validator = hint.Validator, Delegator = owner, Collection = hint.Token, TokenId = hint.TokenId, Hold = hint.Hold }, at).WaitAsync(token)
+                            : await StakeResponseDecoder.QueryAsync(client.Web3, contract, new GetNftStake() { Validator = hint.Validator, Delegator = owner, Collection = hint.Token, TokenId = hint.TokenId }, at).WaitAsync(token);
+                        state = output;
                         if (state.Exists && state.TokenId != hint.TokenId) throw new InvalidDataException("Номер NFT-стейка не совпал.");
                     }
                     else if (hint.Hold > 0 && hint.Token.Equals(wdel, StringComparison.OrdinalIgnoreCase))
                     {
-                        var output = await client.Web3.Eth.GetContractQueryHandler<GetNativeHoldStake>().QueryDeserializingToObjectAsync<GetStakeOutput>(new() { Validator = hint.Validator, Delegator = owner, Hold = hint.Hold }, contract, at).WaitAsync(token); state = DelegationStake.FromContract(output.Stake);
+                        var output = await StakeResponseDecoder.QueryAsync(client.Web3, contract, new GetNativeHoldStake() { Validator = hint.Validator, Delegator = owner, Hold = hint.Hold }, at).WaitAsync(token); state = output;
                     }
                     else state = hint.Hold > 0 ? await new StakeReader(client.Web3, contract).GetHoldStakeAsync(hint.Validator, owner, hint.Token, hint.Hold, at).WaitAsync(token) : await new StakeReader(client.Web3, contract).GetStakeAsync(hint.Validator, owner, hint.Token, at).WaitAsync(token);
                     if (!state.Validator.Equals(hint.Validator, StringComparison.OrdinalIgnoreCase) || !state.Token.Equals(hint.Token, StringComparison.OrdinalIgnoreCase) || state.HoldTimestamp != hint.Hold) { if (!state.Exists) return; throw new InvalidDataException("Идентификатор стейка не совпал."); }
@@ -377,7 +378,7 @@ public sealed class WalletDataReader : IDisposable
                 if (!state.Exists) return; if (!state.Delegator.Equals(owner, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Чужой владелец стейка.");
                 var native = state.Token.Equals(wdel, StringComparison.OrdinalIgnoreCase) || state.TokenType == 4; int? decimals = native ? 18 : state.TokenType is 2 or 3 ? 0 : null; var symbol = native ? "DEL" : state.TokenType is 2 or 3 ? "NFT" : "Токен";
                 if (decimals is null) { var service = new Erc20Service(client, state.Token); decimals = await service.GetDecimalsAsync(at).WaitAsync(token); if (decimals > 36) throw new InvalidDataException("Точность токена превышает поддерживаемую."); symbol = Clean(await service.GetSymbolAsync(at).WaitAsync(token), 32); }
-                verified.Add(new(hint.Id, hint.Kind, state.Validator, hint.ValidatorName, state.Token, symbol, decimals, state.AmountRaw, state.TokenId, state.TokenType, state.HoldTimestamp, unfreeze, status));
+                verified.Add(new(hint.Id, hint.Kind, state.Validator, hint.ValidatorName, state.Token, symbol, decimals, state.AmountRaw, state.TokenId, state.TokenType, state.HoldTimestamp, unfreeze, status) { HoldStartTime = state.HoldStartTime });
             }
             catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested) { failures.Add(hint.Id); }
         });

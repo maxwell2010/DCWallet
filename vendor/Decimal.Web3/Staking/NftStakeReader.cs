@@ -24,13 +24,10 @@ public sealed class NftStakeReader
         string validator, string delegator, string nft, BigInteger tokenId, BlockParameter? block = null)
     {
         Validate(validator, delegator, nft, tokenId);
-        var result = await _web3.Eth.GetContractQueryHandler<GetNftStakeFunction>()
-            .QueryDeserializingToObjectAsync<GetStakeOutput>(new GetNftStakeFunction
+        return await StakeResponseDecoder.QueryAsync(_web3, _contract, new GetNftStakeFunction
             {
                 Validator = validator, Delegator = delegator, Nft = nft, TokenId = tokenId
-            }, _contract, block ?? BlockParameter.CreateLatest()).ConfigureAwait(false);
-        return DelegationStake.FromContract(result?.Stake ??
-            throw new InvalidOperationException("Missing NFT stake response"));
+            }, block).ConfigureAwait(false);
     }
 
     public async Task<DelegationStake> GetHoldStakeAsync(
@@ -39,14 +36,11 @@ public sealed class NftStakeReader
     {
         Validate(validator, delegator, nft, tokenId);
         ValidateUint256(holdTimestamp, nameof(holdTimestamp));
-        var result = await _web3.Eth.GetContractQueryHandler<GetHoldNftStakeFunction>()
-            .QueryDeserializingToObjectAsync<GetStakeOutput>(new GetHoldNftStakeFunction
+        return await StakeResponseDecoder.QueryAsync(_web3, _contract, new GetHoldNftStakeFunction
             {
                 Validator = validator, Delegator = delegator, Nft = nft,
                 TokenId = tokenId, HoldTimestamp = holdTimestamp
-            }, _contract, block ?? BlockParameter.CreateLatest()).ConfigureAwait(false);
-        return DelegationStake.FromContract(result?.Stake ??
-            throw new InvalidOperationException("Missing NFT hold stake response"));
+            }, block).ConfigureAwait(false);
     }
 
     private static void Validate(string validator, string delegator, string nft, BigInteger tokenId)

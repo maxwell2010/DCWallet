@@ -50,13 +50,8 @@ public sealed class StakeReader
                 Validator = validator, Delegator = delegator, Token = token,
                 HoldTimestamp = holdTimestamp.Value
             };
-        var output = await _web3.Eth.GetContractQueryHandler<TFunction>()
-            .QueryDeserializingToObjectAsync<GetStakeOutput>(
-                function, _delegationAddress, block ?? BlockParameter.CreateLatest())
+        return await StakeResponseDecoder.QueryAsync(_web3, _delegationAddress, function, block)
             .ConfigureAwait(false);
-        if (output?.Stake is null)
-            throw new InvalidOperationException("Missing delegation stake response");
-        return DelegationStake.FromContract(output.Stake);
     }
 }
 

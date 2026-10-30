@@ -3,7 +3,7 @@
   "repository": "https://github.com/maxwell2010/decimal-web3-sdk",
   "baseCommit": "57e8413adeccbaed39e12eb4e1be0ee4e8c5fda7",
   "snapshotUtc": "2026-10-29T03:12:45.5423581Z",
-  "note": "Local working-tree snapshot including uncommitted SDK work. Copied bytes are hashed; upstream SDK remains unmodified.",
+  "note": "Local working-tree snapshot including uncommitted SDK work. Copied bytes are hashed; upstream SDK remains unmodified. Wallet-local ABI compatibility patches are listed in localPatches; files contains current byte hashes. The upstream SDK checkout remains unmodified.",
   "files": {
     "Decimal.Web3/Bridge/BridgeDrafts.cs": "66574cd3514df9fb16b7252aa158b441439634d1fdef9292a96382ef50887180",
     "Decimal.Web3/Bridge/BridgeQueries.cs": "73e411aaed8e8d75eb53c54380a3e275c99c94f131ea5e03624906bc073989b6",
@@ -25,11 +25,11 @@
     "Decimal.Web3/Nft/Erc721Service.cs": "9868b69cb483c7d6cd2748d0053be8987a9d7e1276661022d13efe49bbd921b1",
     "Decimal.Web3/Nft/NftReceiptReader.cs": "680ee415c28cc174e1a34addc7f8c160d4b1a9e72854648503d807f14f2b9394",
     "Decimal.Web3/Staking/DelegationDrafts.cs": "d989ca03a8ce2ef2bc08532a06b2caf351bbf55dc29f55958e66ad1f14d5c535",
-    "Decimal.Web3/Staking/FrozenStakeContracts.cs": "f96e67ac121c81f1e4428cce61d71d1093366f04c09a32dcbe5251e8fc2763ee",
-    "Decimal.Web3/Staking/FrozenStakeReader.cs": "0052a8492a8c2afff5559b2446bdc367ac30d09d0e7228f4f2be167d005d8c25",
+    "Decimal.Web3/Staking/FrozenStakeContracts.cs": "98e272e4bf02dfc7e50cd90206023e0724a58d976f5952bf1459fc48b49fd633",
+    "Decimal.Web3/Staking/FrozenStakeReader.cs": "bf92be8c5a7fa5c2a11a27618b181cdd3b349b14cfda1421e417328c4a0f9458",
     "Decimal.Web3/Staking/NftDelegationDrafts.cs": "96489e467914c711c8768bec13ee064d48088f99892264ffe84662882899d31e",
-    "Decimal.Web3/Staking/NftStakeReader.cs": "7dd63497952feaf5e5479c3218efca2c3520e217532fdc0096b946b058fc708e",
-    "Decimal.Web3/Staking/StakeReader.cs": "4f341b5deb2439e29bcad096346c1782a87c30fd8925628e9c80fd406c8d1dca",
+    "Decimal.Web3/Staking/NftStakeReader.cs": "d49a1955a0b3fdf3184ac46647d652ce0f627c38fed5161c67bcf6704c68f6e0",
+    "Decimal.Web3/Staking/StakeReader.cs": "c6a47f0254589c1abc898762f7a0c69f16e987753340c7e979c30da091f4ace5",
     "Decimal.Web3/Staking/WithdrawalReceiptReader.cs": "667e423919437d587b7f7e41b36647fed16a1eab93d8b9a246ec541afd420482",
     "Decimal.Web3/TokenCreation/TokenCreationDrafts.cs": "7a28cc09f1ac085d892de2437a2104a436709d811dfef70cef9fc16a345d6dea",
     "Decimal.Web3/TokenCreation/TokenCreationReceiptReader.cs": "cbfb0ccc0d68e8f6741675327f5fa1ba3497371ebfc05fd07662daa124973918",
@@ -47,6 +47,29 @@
     "Decimal.Web3/Validators/MasterValidatorFunctions.cs": "a694583f75bcca25357e08f4eeec2e85953e5bdbbeae614f57444732256f137e",
     "Decimal.Web3/Validators/ValidatorService.cs": "a4e8bc782f330312d8da039858d4bd7b6223ad1dfbf2dcdb36a63aaf92f265fb",
     "Decimal.Web3/Wallet/DecimalTransactionSigner.cs": "0ee3401b982ee39f880bd7eb7e086f48741b71854c2b9c459a3be5f1f44221ff",
-    "Decimal.Web3/Wallet/DecimalWallet.cs": "0049fa4391ad223790e19e37246738414cbcbe4d717e5d1f85459b28b37ba803"
+    "Decimal.Web3/Wallet/DecimalWallet.cs": "0049fa4391ad223790e19e37246738414cbcbe4d717e5d1f85459b28b37ba803",
+    "Decimal.Web3/Staking/StakeResponseDecoder.cs": "92e0a0b810f4c7a42fa22e5d7b49791b7a98cc0a759410c627e9b9f476662b54"
+  },
+  "localPatches": {
+    "Decimal.Web3/Staking/FrozenStakeContracts.cs": {
+      "snapshotSha256": "f96e67ac121c81f1e4428cce61d71d1093366f04c09a32dcbe5251e8fc2763ee",
+      "reason": "Decimal 2026-10-30 Stake ABI compatibility; holdStartTime and strict per-response decoding"
+    },
+    "Decimal.Web3/Staking/FrozenStakeReader.cs": {
+      "snapshotSha256": "0052a8492a8c2afff5559b2446bdc367ac30d09d0e7228f4f2be167d005d8c25",
+      "reason": "Decimal 2026-10-30 Stake ABI compatibility; holdStartTime and strict per-response decoding"
+    },
+    "Decimal.Web3/Staking/StakeReader.cs": {
+      "snapshotSha256": "4f341b5deb2439e29bcad096346c1782a87c30fd8925628e9c80fd406c8d1dca",
+      "reason": "Decimal 2026-10-30 Stake ABI compatibility; holdStartTime and strict per-response decoding"
+    },
+    "Decimal.Web3/Staking/NftStakeReader.cs": {
+      "snapshotSha256": "7dd63497952feaf5e5479c3218efca2c3520e217532fdc0096b946b058fc708e",
+      "reason": "Decimal 2026-10-30 Stake ABI compatibility; holdStartTime and strict per-response decoding"
+    },
+    "Decimal.Web3/Staking/StakeResponseDecoder.cs": {
+      "snapshotSha256": null,
+      "reason": "Decimal 2026-10-30 Stake ABI compatibility; holdStartTime and strict per-response decoding"
+    }
   }
 }

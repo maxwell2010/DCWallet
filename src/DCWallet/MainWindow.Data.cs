@@ -175,6 +175,7 @@ public sealed partial class MainWindow
             {
                 BeginCard(); var quantity = Text((stake.Decimals is { } decimals ? AmountDisplay.Compact(stake.Raw, decimals) : stake.Amount) + " " + stake.Symbol, 20); ToolTip.SetTip(quantity, "Точно: " + stake.Amount + " " + stake.Symbol); target.Children.Add(quantity); target.Children.Add(Text((stake.ValidatorName.Length > 0 ? stake.ValidatorName : stake.Validator) + "\n" + stake.Token, 12, Muted));
                 target.Children.Add(Text(stake.Kind == "active" ? stake.Hold > 0 ? "Hold до " + StakeDate(stake.Hold) : "Активный стейк" : stake.Kind == "transfer" ? stake.Unfreeze <= DateTimeOffset.UtcNow.ToUnixTimeSeconds() ? "Перенос ожидает обработки сетью" : "Стейк переносится: ожидается разморозка" : stake.CanComplete ? "Разморозка завершена. Можно завершить заявку." : "Ожидается разморозка", 14));
+                if (stake.HoldStartTime is { } holdStart && holdStart > 0) target.Children.Add(Text("Начало hold: " + StakeDate(holdStart), 12, Muted));
                 if (signer is not null)
                 {
                     if (stake.Kind == "active") Button("Отозвать / перенести", () => { ShowStakeOperation(stake); return Task.CompletedTask; });
@@ -209,13 +210,13 @@ public sealed partial class MainWindow
             if (isNft)
             {
                 var result = stake.Hold > 0
-                    ? await client.Web3.Eth.GetContractQueryHandler<GetNftHoldStake>().QueryDeserializingToObjectAsync<GetStakeOutput>(new() { Validator = stake.Validator, Delegator = Address, Collection = stake.Token, TokenId = stake.TokenId, Hold = stake.Hold }, contract)
-                    : await client.Web3.Eth.GetContractQueryHandler<GetNftStake>().QueryDeserializingToObjectAsync<GetStakeOutput>(new() { Validator = stake.Validator, Delegator = Address, Collection = stake.Token, TokenId = stake.TokenId }, contract);
-                current = DelegationStake.FromContract(result.Stake);
+                    ? await StakeResponseDecoder.QueryAsync(client.Web3, contract, new GetNftHoldStake() { Validator = stake.Validator, Delegator = Address, Collection = stake.Token, TokenId = stake.TokenId, Hold = stake.Hold })
+                    : await StakeResponseDecoder.QueryAsync(client.Web3, contract, new GetNftStake() { Validator = stake.Validator, Delegator = Address, Collection = stake.Token, TokenId = stake.TokenId });
+                current = result;
             }
             else if (stake.Hold > 0 && stake.Symbol == "DEL")
             {
-                var result = await client.Web3.Eth.GetContractQueryHandler<GetNativeHoldStake>().QueryDeserializingToObjectAsync<GetStakeOutput>(new() { Validator = stake.Validator, Delegator = Address, Hold = stake.Hold }, contract); current = DelegationStake.FromContract(result.Stake);
+                var result = await StakeResponseDecoder.QueryAsync(client.Web3, contract, new GetNativeHoldStake() { Validator = stake.Validator, Delegator = Address, Hold = stake.Hold }); current = result;
             }
             else current = stake.Hold > 0 ? await new StakeReader(client.Web3, contract).GetHoldStakeAsync(stake.Validator, Address, stake.Token, stake.Hold) : await new StakeReader(client.Web3, contract).GetStakeAsync(stake.Validator, Address, stake.Token);
             if (!current.Delegator.Equals(Address, StringComparison.OrdinalIgnoreCase) || !current.Token.Equals(stake.Token, StringComparison.OrdinalIgnoreCase) || !current.Validator.Equals(stake.Validator, StringComparison.OrdinalIgnoreCase) || current.HoldTimestamp != stake.Hold || current.AmountRaw < raw) throw new InvalidOperationException("Позиция изменилась. Обновите стейки и проверьте количество.");

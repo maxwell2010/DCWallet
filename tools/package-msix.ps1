@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory)][ValidateSet('win-x64','win-arm64')][string]$Runtime,
-    [string]$AppVersion = '0.2.0',
+    [string]$AppVersion = '0.2.1',
     [string]$PackageVersion = '1.0.0.0',
     [string]$IdentityName,
     [string]$Publisher,

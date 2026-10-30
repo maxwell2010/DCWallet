@@ -41,7 +41,7 @@ public sealed class FrozenStakeDto
     [Parameter("uint256", "unfreezeTimestamp", 4)] public BigInteger UnfreezeTimestamp { get; set; }
 }
 
-// Some deployed delegation contracts include an additional uint256 in Stake.
+// DecimalDelegation at a46cb48d: the eighth Stake word is the hold start time.
 [Struct("Stake")]
 public sealed class ExtendedDelegationStakeDto
 {
@@ -52,7 +52,8 @@ public sealed class ExtendedDelegationStakeDto
     [Parameter("uint256", "tokenId", 5)] public BigInteger TokenId { get; set; }
     [Parameter("uint8", "tokenType", 6)] public byte TokenType { get; set; }
     [Parameter("uint256", "holdTimestamp", 7)] public BigInteger HoldTimestamp { get; set; }
-    [Parameter("uint256", "extraIndex", 8)] public BigInteger ExtraIndex { get; set; }
+    [Parameter("uint256", "holdStartTime", 8)] public BigInteger HoldStartTime { get; set; }
+    [Obsolete("Use HoldStartTime")] public BigInteger ExtraIndex { get => HoldStartTime; set => HoldStartTime = value; }
 }
 
 [Struct("FrozenStake")]
