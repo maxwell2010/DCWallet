@@ -311,6 +311,8 @@ public sealed class WalletDataReader : IDisposable
         {
             var graphMeta = await GraphAsync("{_meta{block{number}}}", new { }, ct);
             var indexed = U(S(P(P(graphMeta, "_meta"), "block"), "number"));
+            // The index can advance while discovery HTTP requests are in flight.
+            if (indexed > block.Number.Value) block = await Snapshot(ct);
             foreach (var kind in new[] { ("stakes", "active"), ("withdrawStakes", "withdraw"), ("transferStakes", "transfer") })
             {
                 var after = "";

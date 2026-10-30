@@ -132,6 +132,13 @@ public sealed class DiscoveryTests
         var result = await reader.StakesAsync(Owner);
         Assert.False(result.Complete); Assert.NotEmpty(result.Issues);
     }
+    [Fact]
+    public async Task AdvancingHeadDoesNotMakeFreshStakingLookUnavailable()
+    {
+        using var rpc = new DiscoveryRpc { AdvanceHead = true }; using var reader = Reader(rpc,new DiscoveryCatalogHandler { IndexBlock = 101, StaleQueue = true });
+        var result = await reader.StakesAsync(Owner);
+        Assert.True(result.Complete); Assert.Empty(result.Issues); Assert.Equal(new BigInteger(101), result.Block); Assert.Equal(0,rpc.Broadcasts);
+    }
     sealed class TimedOutCatalog:HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct) => throw new TaskCanceledException("fixture transport timeout");
