@@ -68,7 +68,7 @@ public sealed partial class MainWindow
             ((Control)token.Parent!).IsVisible = picker.IsVisible = permit.IsVisible = asset.SelectedIndex == 1;
             advanced.IsVisible = asset.SelectedIndex == 0;
             if(approval is not null)approval.IsVisible=asset.SelectedIndex==1;
-            ((Control)password.Parent!).IsVisible = asset.SelectedIndex == 1 && permit.IsChecked == true; Invalidate();
+            ((Control)password.Parent!).IsVisible = asset.SelectedIndex == 1 && permit.IsChecked == true && !Vault.IsPasswordless(VaultPath); Invalidate();
         }
         asset.SelectionChanged += (_, _) => Visibility(); permit.IsCheckedChanged += (_, _) => Visibility(); Visibility();
         async Task<(Erc20Service Service, IReadOnlyList<Erc20Recipient> Recipients, BigInteger Total, string Symbol)> TokenInputs()

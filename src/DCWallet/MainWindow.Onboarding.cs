@@ -20,10 +20,10 @@ public sealed partial class MainWindow
     {
         Reset("", ""); SetPageWidth(460); page.Margin = new Thickness(0, 40, 0, 16); page.Spacing = 12;
         page.Children.Add(Logo(54)); var title = Text("DC WALLET", 26); title.FontWeight = FontWeight.SemiBold; title.HorizontalAlignment = HorizontalAlignment.Center; page.Children.Add(title);
-        var intro = Text("Ключи хранятся только на этом устройстве и зашифрованы вашим паролем. Кошелек работает в сети Decimal.", 14, Muted); intro.TextAlignment = TextAlignment.Center; page.Children.Add(intro);
+        var intro = Text(Vault.IsPasswordless(VaultPath)?"Кошелек работает без парольной защиты. Ключи хранятся на этом устройстве.":"Ключи хранятся только на этом устройстве и зашифрованы вашим паролем. Кошелек работает в сети Decimal.", 14, Muted); intro.TextAlignment = TextAlignment.Center; page.Children.Add(intro);
         if (File.Exists(VaultPath))
         {
-            BeginCard(); var password = Field("Пароль кошелька", secret: true); EndCard();
+            BeginCard(); var password = Field("Пароль кошелька", secret: true); ((Control)password.Parent!).IsVisible=!Vault.IsPasswordless(VaultPath); if(Vault.IsPasswordless(VaultPath))target.Children.Add(Text("Пароль отключен. Любой с доступом к файлу кошелька может распоряжаться средствами.",13,Muted)); EndCard();
             var open = Button("Открыть кошелек", async () =>
             {
                 var current = epoch; var unlockPassword = password.Text ?? "";
@@ -131,7 +131,7 @@ public sealed partial class MainWindow
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions { Title = "Резервная копия DC WALLET", AllowMultiple = false });
         if (files.Count == 0) { status.Text = "Отменено"; return; }
         var path = files[0].TryGetLocalPath() ?? throw new IOException("Требуется локальный файл."); Reset("Восстановить резервную копию", "Введите пароль, которым зашифрован выбранный файл."); Back(ShowAccess);
-        BeginCard(); var password = Field("Пароль", secret: true); EndCard();
+        BeginCard(); if(Vault.IsPasswordless(path))target.Children.Add(Text("Эта копия доступна без пароля. Задайте новый пароль от 12 символов для восстановленного профиля. Отключить его можно в настройках.",13,Muted)); var password = Field("Пароль", secret: true); EndCard();
         Button("Восстановить", async () =>
         {
             var pass = password.Text ?? ""; var credential = await Task.Run(() => Vault.OpenCredentialAsync(path, pass)); await StoreCredentialAsync(credential,pass,"Восстановленный"); pass = ""; password.Text = ""; ShowAccess();

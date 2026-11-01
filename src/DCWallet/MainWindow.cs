@@ -52,6 +52,9 @@ public sealed partial class MainWindow : Window
         dataDirectory = testDataDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MintCandy", "DCWallet");
         client = new(network); session = new(client, JournalDirectory);
         LoadSelectedProfile(); InitializeShell(); ShowAccess();
+        PropertyChanged += (_, e) => { if(e.Property == IsVisibleProperty && !IsVisible) Invalidate(); };
+        Deactivated += (_, _) => Invalidate();
+        Closed += (_, _) => Invalidate();
     }
     private async Task Run(Func<Task> action)
     {
@@ -70,7 +73,7 @@ public sealed partial class MainWindow : Window
         }
         finally { busy = false; page.IsEnabled = true; FlushPortfolioNotification(); }
     }
-    private void Invalidate() { prepared = null; session.Clear(); }
+    private void Invalidate() { permitGeneration++; var clear = clearPermitCredential; clearPermitCredential = null; clear?.Invoke(); prepared = null; session.Clear(); }
     private bool RequireWallet()
     {
         if (signer is not null || watchAddress is not null) return true; ShowAccess(); status.Text = "Сначала откройте кошелек."; return false;
@@ -182,9 +185,11 @@ public sealed partial class MainWindow : Window
             else await Preview(draft, OperationPresentation.Title(op));
         }, true);
     }
-    private async Task Preview(TransactionDraft draft, string description, string? assetSummary = null, Action<Nethereum.RPC.Eth.DTOs.TransactionReceipt>? receiptVerifier = null, Func<Nethereum.RPC.Eth.DTOs.TransactionReceipt, string>? receiptSummary = null)
+    private async Task Preview(TransactionDraft draft, string description, string? assetSummary = null, Action<Nethereum.RPC.Eth.DTOs.TransactionReceipt>? receiptVerifier = null, Func<Nethereum.RPC.Eth.DTOs.TransactionReceipt, string>? receiptSummary = null, Func<Task>? beforeSend = null)
     {
         var activeSigner = signer ?? throw new InvalidOperationException("Кошелек заблокирован."); var current = epoch;
+        if (beforeSend is not null) await beforeSend();
+        if (current != epoch || !ReferenceEquals(activeSigner, signer)) throw new InvalidOperationException("Кошелек изменился.");
         var transfer = await session.PrepareAsync(draft, activeSigner);
         if (!string.IsNullOrWhiteSpace(preferences.GasPriceCeilingGwei) && transfer.Quote.GasPriceWei > Units.Parse(preferences.GasPriceCeilingGwei, 9))
         {
@@ -207,6 +212,8 @@ public sealed partial class MainWindow : Window
         {
             if (confirm.IsChecked != true) throw new InvalidOperationException("Подтвердите параметры транзакции.");
             if (!ReferenceEquals(prepared, transfer) || signer is null) throw new InvalidOperationException("Подготовьте транзакцию заново.");
+            if (beforeSend is not null) await beforeSend();
+            if (!ReferenceEquals(prepared, transfer) || current != epoch || !ReferenceEquals(activeSigner, signer)) throw new InvalidOperationException("Подготовьте транзакцию заново.");
             prepared = null;
             var result = await session.SendAsync(transfer);
             Reset("Отправлено в RPC", "Получение хэша не означает успешного исполнения. Проверьте квитанцию.");

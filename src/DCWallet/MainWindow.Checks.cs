@@ -23,7 +23,7 @@ public sealed partial class MainWindow
         var checkPassword=Field("Отдельный пароль файла чека (12+ символов)",secret:true);
         var checkPasswordAgain=Field("Повторите пароль файла чека",secret:true);
         var walletPassword=Field("Пароль кошелька (только для permit)",secret:true);
-        void UpdateAssetFields(){var tokenMode=asset.SelectedIndex>0;((Control)token.Parent!).IsVisible=tokenMode;tokenPicker.IsVisible=tokenMode;((Control)walletPassword.Parent!).IsVisible=asset.SelectedIndex==2;if(asset.SelectedIndex!=2)walletPassword.Text="";}
+        void UpdateAssetFields(){var tokenMode=asset.SelectedIndex>0;((Control)token.Parent!).IsVisible=tokenMode;tokenPicker.IsVisible=tokenMode;((Control)walletPassword.Parent!).IsVisible=asset.SelectedIndex==2&&!Vault.IsPasswordless(VaultPath);if(asset.SelectedIndex!=2)walletPassword.Text="";}
         asset.SelectionChanged+=(_,_)=>UpdateAssetFields();UpdateAssetFields();
         ToolTip.SetTip(contract,"Профиль mainnet использует проверенный runtime напрямую; testnet использует отдельный прокси. Код и chain ID проверяются при каждой подготовке.");
         ToolTip.SetTip(due,"Срок зависит от высоты блоков сети. После срока контракт может отклонить погашение. Не используйте время Unix.");

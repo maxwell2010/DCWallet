@@ -85,7 +85,7 @@ public sealed partial class MainWindow
             delegateConsent.IsChecked = false; proposal = imported; safe.Text = imported.Transaction.SafeAddress; Display();
         });
         var signatures = Field("Подписи: адрес:0xHEX, адрес:approved_hash или адрес:contract:0xHEX", multiline: true);
-        var password = Field("Пароль кошелька для подписи предложения", secret: true);
+        var password = Field("Пароль кошелька для подписи предложения", secret: true); ((Control)password.Parent!).IsVisible=!Vault.IsPasswordless(VaultPath);
         Button("Подписать показанное предложение", async () =>
         {
             if (proposal is null || signer is null) throw new InvalidOperationException("Откройте кошелек и предложение.");

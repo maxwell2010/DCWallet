@@ -5,7 +5,7 @@ using Decimal.Web3.Wallet;
 
 namespace DCWallet.Core;
 
-public sealed record VaultEnvelope(int Version, int Iterations, string Salt, string Nonce, string Ciphertext, string Tag);
+public sealed record VaultEnvelope(int Version, int Iterations, string Salt, string Nonce, string Ciphertext, string Tag, bool Passwordless = false);
 public sealed record VaultCredential(string Kind, string Secret)
 {
     public override string ToString()=>"VaultCredential "+Kind;
@@ -24,16 +24,33 @@ public static class Vault
         }
         finally { credential = new("Mnemonic",""); if (File.Exists(temporary)) File.Delete(temporary); }
     }
+    public static bool IsPasswordless(string path)
+    {
+        if (!File.Exists(path)) return false;
+        if (new FileInfo(path).Length > 16384) throw new InvalidDataException("Неверный файл кошелька.");
+        return JsonSerializer.Deserialize<VaultEnvelope>(File.ReadAllText(path))?.Passwordless == true;
+    }
+    public static async Task SetPasswordProtectionAsync(string path,string currentPassword,string newPassword,bool disable)
+    {
+        var credential=await OpenCredentialAsync(path,currentPassword);
+        var temp=Path.GetFullPath(path)+"."+Guid.NewGuid().ToString("N")+".vault";
+        try {
+            var payload=credential.Kind=="Mnemonic"?credential.Secret:JsonSerializer.Serialize(credential);
+            await CreatePayloadAsync(temp,payload,disable?"":newPassword,credential.Kind=="Mnemonic"?1:2,disable);
+            if(await OpenCredentialAsync(temp,disable?"":newPassword)!=credential)throw new InvalidDataException("Проверка нового файла кошелька не пройдена.");
+            File.Replace(temp,Path.GetFullPath(path),null);
+        } finally {credential=new("Mnemonic","");if(File.Exists(temp))File.Delete(temp);}
+    }
+    private static byte[] AssociatedData(int version,bool passwordless)=>Encoding.UTF8.GetBytes((version==1?"DCWallet:v1:BIP39":"DCWallet:v2:Credential")+(passwordless?":Passwordless":""));
     private const int Iterations = 600_000;
-    private static readonly byte[] Aad = Encoding.UTF8.GetBytes("DCWallet:v1:BIP39");
     public static Task CreateAsync(string path,string mnemonic,string password) {
         if(!DecimalWallet.IsValidMnemonic(mnemonic))throw new ArgumentException("Неверная seed-фраза BIP39.");
         return CreatePayloadAsync(path,mnemonic.Trim(),password,1);
     }
     public static Task CreatePrivateKeyAsync(string path,string privateKey,string password)=>CreatePayloadAsync(path,JsonSerializer.Serialize(new VaultCredential("PrivateKey",WalletSigningSession.ValidatePrivateKey(privateKey))),password,2);
-    private static async Task CreatePayloadAsync(string path, string mnemonic, string password,int version)
+    private static async Task CreatePayloadAsync(string path, string mnemonic, string password,int version,bool passwordless=false)
     {
-        if (password.Length < 12) throw new ArgumentException("Пароль должен содержать не менее 12 символов.");
+        if (!passwordless && password.Length < 12) throw new ArgumentException("Пароль должен содержать не менее 12 символов.");
         var salt = RandomNumberGenerator.GetBytes(32);
         var nonce = RandomNumberGenerator.GetBytes(12);
         var key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, HashAlgorithmName.SHA256, 32);
@@ -41,8 +58,8 @@ public static class Vault
         var cipher = new byte[plain.Length]; var tag = new byte[16];
         try
         {
-            using var aes = new AesGcm(key, 16); aes.Encrypt(nonce, plain, cipher, tag, version==1?Aad:Encoding.UTF8.GetBytes("DCWallet:v2:Credential"));
-            var envelope = new VaultEnvelope(version, Iterations, Convert.ToBase64String(salt), Convert.ToBase64String(nonce), Convert.ToBase64String(cipher), Convert.ToBase64String(tag));
+            using var aes = new AesGcm(key, 16); aes.Encrypt(nonce, plain, cipher, tag, AssociatedData(version,passwordless));
+            var envelope = new VaultEnvelope(version, Iterations, Convert.ToBase64String(salt), Convert.ToBase64String(nonce), Convert.ToBase64String(cipher), Convert.ToBase64String(tag),passwordless);
             var full = Path.GetFullPath(path);
             Directory.CreateDirectory(Path.GetDirectoryName(full)!);
             // Never overwrite an existing wallet, including when two app instances race.
@@ -71,11 +88,11 @@ public static class Vault
         var salt = Convert.FromBase64String(e.Salt); var nonce = Convert.FromBase64String(e.Nonce);
         var cipher = Convert.FromBase64String(e.Ciphertext); var tag = Convert.FromBase64String(e.Tag);
         if (salt.Length != 32 || nonce.Length != 12 || tag.Length != 16 || cipher.Length > 4096) throw new InvalidDataException();
-        var key = Rfc2898DeriveBytes.Pbkdf2(password, salt, e.Iterations, HashAlgorithmName.SHA256, 32);
+        var key = Rfc2898DeriveBytes.Pbkdf2(e.Passwordless?"":password, salt, e.Iterations, HashAlgorithmName.SHA256, 32);
         var plain = new byte[cipher.Length];
         try
         {
-            using var aes = new AesGcm(key, 16); aes.Decrypt(nonce, cipher, tag, plain, e.Version==1?Aad:Encoding.UTF8.GetBytes("DCWallet:v2:Credential"));
+            using var aes = new AesGcm(key, 16); aes.Decrypt(nonce, cipher, tag, plain, AssociatedData(e.Version,e.Passwordless));
             var mnemonic = Encoding.UTF8.GetString(plain);
             if(e.Version==2){var credential=JsonSerializer.Deserialize<VaultCredential>(mnemonic)??throw new InvalidDataException("Неверное содержимое кошелька.");if(credential.Kind!="PrivateKey")throw new InvalidDataException("Неизвестный тип кошелька.");return new("PrivateKey",WalletSigningSession.ValidatePrivateKey(credential.Secret));}
             if (!DecimalWallet.IsValidMnemonic(mnemonic)) throw new InvalidDataException("Неверное содержимое кошелька.");

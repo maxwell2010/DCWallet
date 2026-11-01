@@ -38,7 +38,7 @@ public sealed partial class MainWindow
         EndCard();
         if (signer is not null && !privateKeyProfile)
         {
-            page.Children.Add(Text("Фраза восстановления", 20)); BeginCard(); target.Children.Add(Text("Для просмотра фразы введите пароль кошелька. Убедитесь, что экран не видят посторонние.", 13, Muted)); var password = Field("Пароль", secret: true);
+            page.Children.Add(Text("Фраза восстановления", 20)); BeginCard(); target.Children.Add(Text(Vault.IsPasswordless(VaultPath)?"Пароль отключен. Убедитесь, что экран не видят посторонние.":"Для просмотра фразы введите пароль кошелька. Убедитесь, что экран не видят посторонние.", 13, Muted)); var password = Field("Пароль", secret: true); ((Control)password.Parent!).IsVisible=!Vault.IsPasswordless(VaultPath);
             var secret = new TextBox { IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, IsVisible = false }; target.Children.Add(secret);
             Button("Показать фразу", async () => { var pass = password.Text ?? ""; var phrase = await Task.Run(() => Vault.OpenAsync(VaultPath, pass)); password.Text = ""; pass = ""; secret.Text = phrase; phrase = ""; secret.IsVisible = true; }); EndCard();
         }
@@ -66,6 +66,8 @@ public sealed partial class MainWindow
         });
         if (File.Exists(VaultPath))
         {
+            ShowPasswordProtectionControls();
+            if(!Vault.IsPasswordless(VaultPath)) {
             target.Children.Add(new Separator()); target.Children.Add(Text("Сменить пароль", 15)); var old = Field("Текущий пароль", secret: true); var next = Field("Новый пароль", secret: true); var again = Field("Новый пароль еще раз", secret: true);
             Button("Сменить пароль", async () =>
             {
@@ -73,6 +75,7 @@ public sealed partial class MainWindow
                 var previous = old.Text ?? ""; var replacement = next.Text ?? "";
                 await Task.Run(() => Vault.ChangePasswordAsync(VaultPath, previous, replacement)); previous = replacement = ""; old.Text = next.Text = again.Text = ""; Lock(); status.Text = "Пароль изменен. Откройте кошелек с новым паролем.";
             });
+            }
         }
         EndCard(); page.Children.Add(Text("Вид", 19)); page.Children.Add(Text("Тема", 14));
         var themes = Segments(("Как в системе", () => ChangeTheme("system")), ("Темная", () => ChangeTheme("dark")), ("Светлая", () => ChangeTheme("light")), ("Криптопанк", () => ChangeTheme("neon")));
